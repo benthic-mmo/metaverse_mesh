@@ -219,7 +219,7 @@ impl GltfBuilder {
 pub fn generate_model(
     scenes: Vec<SceneGroup>,
     path: PathBuf,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
 
     for (scene_i, scene) in scenes.iter().enumerate() {
@@ -235,7 +235,8 @@ pub fn generate_model(
         }
         builder.finalize_scene(&format!("Scene_{scene_i}"));
     }
-    builder.finalize(&path)
+    builder.finalize(&path)?;
+    Ok(())
 }
 
 // TODO: fix this, and put this info into the gltf builder struct.
@@ -244,7 +245,7 @@ pub fn bake_avatar(
     scenes: Vec<SceneGroup>,
     skeleton: Skeleton,
     path: PathBuf,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut root = Root::default();
     let mut combined_buffer: Vec<u8> = Vec::new();
     let mut bones: BTreeSet<JointName> = BTreeSet::new();
@@ -606,7 +607,7 @@ pub fn bake_avatar(
         bin: Some(Cow::Owned(combined_buffer)),
     };
     glb.to_writer(File::create(&path)?)?;
-    Ok(path)
+    Ok(())
 }
 
 /// Converts a byte vector to a vector aligned to a mutiple of 4

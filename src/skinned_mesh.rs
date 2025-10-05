@@ -1,12 +1,12 @@
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.
 use std::{ffi::{c_char, CStr}, fs, path::PathBuf};
-
+use std::error::Error;
 use metaverse_messages::{capabilities::scene::SceneGroup, utils::skeleton::Skeleton};
 
 use crate::gltf::{bake_avatar, generate_model};
 
-pub fn generate_skinned_mesh(scene_paths: &Vec<PathBuf>, skeleton_path: PathBuf, out_path: PathBuf){
+pub fn generate_skinned_mesh(scene_paths: &Vec<PathBuf>, skeleton_path: PathBuf, out_path: PathBuf) -> Result<(), Box<dyn Error>>{
     let json_str = fs::read_to_string(&skeleton_path).expect(&format!("Failed to read {:?}", skeleton_path));
     let skeleton: Skeleton = serde_json::from_str(&json_str).unwrap_or_else(|e| panic!("Failed to deserialize Skeleton {:?}", e));
     
@@ -16,18 +16,17 @@ pub fn generate_skinned_mesh(scene_paths: &Vec<PathBuf>, skeleton_path: PathBuf,
         let scene: SceneGroup = serde_json::from_str(&json_str).unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
         scenes.push(scene);
     }
-    bake_avatar(scenes, skeleton, out_path);
+    bake_avatar(scenes, skeleton, out_path)
 }
 
-pub fn generate_mesh(scene_paths: &Vec<PathBuf>, out_path: PathBuf){
-    
+pub fn generate_mesh(scene_paths: &Vec<PathBuf>, out_path: PathBuf) -> Result<(), Box<dyn Error>>{ 
     let mut scenes = Vec::new(); 
     for scene in scene_paths{
         let json_str = fs::read_to_string(&scene).expect(&format!("Failed to read {:?}", scene));
         let scene: SceneGroup = serde_json::from_str(&json_str).unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
         scenes.push(scene);
     }
-    generate_model(scenes, out_path);
+    generate_model(scenes, out_path)
 }
 
 #[unsafe(no_mangle)]
@@ -38,7 +37,7 @@ pub unsafe extern "C" fn generate_skinned_mesh_legacy(
     scene_paths_len: usize,
     skeleton_path: *const c_char,
     out_path: *const c_char,
-) {
+) -> *mut c_char{
     let skeleton_str = unsafe { CStr::from_ptr(skeleton_path).to_string_lossy().into_owned() };
     let skeleton = PathBuf::from(skeleton_str);
 
@@ -54,7 +53,13 @@ pub unsafe extern "C" fn generate_skinned_mesh_legacy(
 
     let out_str = unsafe { CStr::from_ptr(out_path).to_string_lossy().into_owned() };
     let out = PathBuf::from(out_str);
-    generate_skinned_mesh(&scenes, skeleton, out);
+    match generate_skinned_mesh(&scenes, skeleton, out) {
+        Ok(_) => std::ffi::CString::new("Success").unwrap().into_raw(),
+        Err(e) => {
+            eprintln!("Failed to generate mesh: {:?}", e);
+            std::ptr::null_mut() // indicate failure to C
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -64,7 +69,7 @@ pub unsafe extern "C" fn generate_model_legacy(
     scene_paths: *const *const c_char,
     scene_paths_len: usize,
     out_path: *const c_char,
-) {
+) -> *mut c_char{
     let scenes: Vec<PathBuf> = unsafe {
         std::slice::from_raw_parts(scene_paths, scene_paths_len)
             .iter()
@@ -77,5 +82,11 @@ pub unsafe extern "C" fn generate_model_legacy(
 
     let out_str = unsafe { CStr::from_ptr(out_path).to_string_lossy().into_owned() };
     let out = PathBuf::from(out_str);
-    generate_mesh(&scenes, out);
+    match generate_mesh(&scenes, out) {
+        Ok(_) => std::ffi::CString::new("Success").unwrap().into_raw(),
+        Err(e) => {
+            eprintln!("Failed to generate mesh: {:?}", e);
+            std::ptr::null_mut() // indicate failure to C
+        }
+    }
 }
