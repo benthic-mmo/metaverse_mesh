@@ -1,5 +1,8 @@
 // skeleton.rs dependencies
-use metaverse_gltf::skinned_mesh::generate_skinned_mesh;
+use metaverse_gltf::{
+    gltf::generate_model,
+    skinned_mesh::{generate_mesh, generate_skinned_mesh},
+};
 use std::path::PathBuf;
 
 #[test]
@@ -20,10 +23,14 @@ pub fn generate_example() {
     let mut out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path.push("tests/generated/Combined.glb");
 
+    let mut out_path_boneless = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    out_path_boneless.push("tests/generated/Boneless.glb");
+
     paths.push(overalls_path);
     paths.push(shirt_path);
     paths.push(body_path);
     paths.push(curves_path);
 
-    generate_skinned_mesh(paths, skeleton_path, out_path);
+    generate_skinned_mesh(&paths, skeleton_path, out_path);
+    generate_mesh(&paths, out_path_boneless);
 }

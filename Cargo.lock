@@ -1351,7 +1351,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "metaverse-gltf"
+name = "metaverse_gltf"
 version = "0.1.0"
 dependencies = [
  "glam",

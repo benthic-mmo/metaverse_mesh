@@ -22,6 +22,224 @@ use std::{
     vec,
 };
 
+struct GltfBuilder {
+    root: gltf_json::Root,
+    buffer_index: gltf_json::Index<gltf_json::Buffer>,
+    combined_buffer: Vec<u8>,
+    nodes: Vec<Index<Node>>,
+}
+
+impl GltfBuilder {
+    fn new(buffer_name: &str) -> Self {
+        let mut root = gltf_json::Root::default();
+        let buffer_index = root.push(gltf_json::Buffer {
+            byte_length: gltf_json::validation::USize64::from(0_usize),
+            name: Some(buffer_name.to_string()),
+            uri: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+        Self {
+            root,
+            buffer_index,
+            combined_buffer: Vec::new(),
+            nodes: Vec::new(),
+        }
+    }
+
+    fn align_4(&mut self) {
+        while self.combined_buffer.len() % 4 != 0 {
+            self.combined_buffer.push(0);
+        }
+    }
+
+    fn push_view(
+        &mut self,
+        byte_length: usize,
+        byte_stride: Option<usize>,
+        target: Option<gltf_json::validation::Checked<gltf_json::buffer::Target>>,
+        name: String,
+    ) -> gltf_json::Index<gltf_json::buffer::View> {
+        let offset = self.combined_buffer.len();
+        self.root.push(View {
+            buffer: self.buffer_index,
+            byte_length: USize64::from(byte_length),
+            byte_offset: Some(USize64::from(offset)),
+            byte_stride: byte_stride.map(Stride),
+            target,
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: Some(name.to_string()),
+        })
+    }
+
+    fn add_vertex_positions(&mut self, vertices: &[Vec3]) -> gltf_json::Index<gltf_json::Accessor> {
+        let (min, max) = bounding_coords(vertices);
+        let vertex_bytes = to_padded_byte_vector(vertices);
+        self.align_4();
+
+        let view = self.push_view(
+            vertex_bytes.len(),
+            Some(std::mem::size_of::<Vec3>()),
+            Some(Valid(Target::ArrayBuffer)),
+            "vertex_positions".to_string(),
+        );
+        self.combined_buffer.extend_from_slice(&vertex_bytes);
+
+        self.root.push(gltf_json::Accessor {
+            buffer_view: Some(view),
+            byte_offset: Some(USize64(0)),
+            count: USize64::from(vertices.len()),
+            component_type: Valid(GenericComponentType(ComponentType::F32)),
+            type_: Valid(gltf_json::accessor::Type::Vec3),
+            min: Some(Value::from(Vec::from(min))),
+            max: Some(Value::from(Vec::from(max))),
+            normalized: false,
+            sparse: None,
+            name: Some("POSITION".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        })
+    }
+
+    fn add_indices(&mut self, indices: &[u16]) -> gltf_json::Index<gltf_json::Accessor> {
+        let mut bytes = Vec::with_capacity(indices.len() * 2);
+        for index in indices {
+            bytes.extend_from_slice(&index.to_le_bytes());
+        }
+        self.align_4();
+
+        let view = self.push_view(
+            bytes.len(),
+            None,
+            Some(Valid(Target::ElementArrayBuffer)),
+            "indices".to_string(),
+        );
+        self.combined_buffer.extend_from_slice(&bytes);
+
+        self.root.push(gltf_json::Accessor {
+            buffer_view: Some(view),
+            byte_offset: Some(USize64(0)),
+            count: USize64::from(indices.len()),
+            component_type: Valid(GenericComponentType(ComponentType::U16)),
+            type_: Valid(gltf_json::accessor::Type::Scalar),
+            normalized: false,
+            sparse: None,
+            name: Some("INDICES".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+            min: None,
+            max: None,
+        })
+    }
+    pub fn add_mesh(
+        &mut self,
+        name: &str,
+        positions: &[Vec3],
+        indices: &[u16],
+    ) -> gltf_json::Index<gltf_json::Mesh> {
+        let pos_accessor = self.add_vertex_positions(positions);
+        let index_accessor = self.add_indices(indices);
+
+        let attributes = [(Valid(Semantic::Positions), pos_accessor)]
+            .into_iter()
+            .collect();
+
+        let primitive = Primitive {
+            attributes,
+            indices: Some(index_accessor),
+            material: None,
+            mode: Valid(Mode::Triangles),
+            targets: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+        };
+
+        self.root.push(Mesh {
+            primitives: vec![primitive],
+            weights: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: Some(name.to_string()),
+        })
+    }
+
+    pub fn add_node_with_mesh(
+        &mut self,
+        mesh_index: gltf_json::Index<gltf_json::Mesh>,
+        name: &str,
+    ) {
+        let node_index = self.root.push(Node {
+            mesh: Some(mesh_index),
+            name: Some(name.to_string()),
+            ..Default::default()
+        });
+        self.nodes.push(node_index);
+    }
+
+    pub fn finalize_scene(&mut self, name: &str) {
+        // Root node containing all scene nodes
+        let root_node_index = self.root.push(Node {
+            children: Some(self.nodes.clone()),
+            name: Some(format!("{name}_root")),
+            ..Default::default()
+        });
+
+        // Push the scene referencing that root node
+        self.root.push(Scene {
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: Some(name.to_string()),
+            nodes: vec![root_node_index],
+        });
+
+        // clear for potential next scene
+        self.nodes.clear();
+    }
+
+    fn finalize(mut self, path: &PathBuf) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        self.root.buffers[self.buffer_index.value() as usize].byte_length =
+            gltf_json::validation::USize64::from(self.combined_buffer.len());
+
+        let json_string = gltf_json::serialize::to_string(&self.root)?;
+        let glb = gltf::binary::Glb {
+            header: gltf::binary::Header {
+                magic: *b"glTF",
+                version: 2,
+                length: (json_string.len() + self.combined_buffer.len()).try_into()?,
+            },
+            json: Cow::Owned(json_string.into_bytes()),
+            bin: Some(Cow::Owned(self.combined_buffer)),
+        };
+        glb.to_writer(File::create(&path)?)?;
+        Ok(path.clone())
+    }
+}
+
+pub fn generate_model(
+    scenes: Vec<SceneGroup>,
+    path: PathBuf,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let mut builder = GltfBuilder::new("Combined Avatar");
+
+    for (scene_i, scene) in scenes.iter().enumerate() {
+        for scene_object in &scene.parts {
+            if let Some(mesh) = scene_object.sculpt.mesh.as_ref() {
+                let mesh_index = builder.add_mesh(
+                    &scene_object.name,
+                    &mesh.high_level_of_detail.vertices,
+                    &mesh.high_level_of_detail.indices,
+                );
+                builder.add_node_with_mesh(mesh_index, &scene_object.name);
+            }
+        }
+        builder.finalize_scene(&format!("Scene_{scene_i}"));
+    }
+    builder.finalize(&path)
+}
+
+// TODO: fix this, and put this info into the gltf builder struct.
+// this will be a lot of work :(
 pub fn bake_avatar(
     scenes: Vec<SceneGroup>,
     skeleton: Skeleton,
@@ -50,227 +268,214 @@ pub fn bake_avatar(
     for scene in scenes {
         for scene_object in scene.parts {
             if let Some(mesh) = scene_object.sculpt.mesh.as_ref() {
-                let (min, max) = bounding_coords(&mesh.high_level_of_detail.vertices);
-                //TODO: may be redundant
-                let padded_vertex_bytes =
-                    to_padded_byte_vector(&mesh.high_level_of_detail.vertices);
+                let vertices_transformed: Vec<Vec3> = mesh.high_level_of_detail.vertices.clone();
+                let (min, max) = bounding_coords(&vertices_transformed);
+
+                let padded_vertex_bytes = to_padded_byte_vector(&vertices_transformed);
+                while combined_buffer.len() % 4 != 0 {
+                    combined_buffer.push(0);
+                }
+                let vertex_offset = combined_buffer.len();
+                let buffer_view = root.push(View {
+                    buffer,
+                    byte_length: USize64::from(padded_vertex_bytes.len()),
+                    byte_offset: Some(USize64::from(vertex_offset)),
+                    byte_stride: Some(Stride(mem::size_of::<Vec3>())),
+                    target: Some(Valid(Target::ArrayBuffer)),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    name: None,
+                });
+                combined_buffer.extend_from_slice(&padded_vertex_bytes);
+                let positions_accessor = root.push(Accessor {
+                    buffer_view: Some(buffer_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(mesh.high_level_of_detail.vertices.len()),
+                    component_type: Valid(GenericComponentType(ComponentType::F32)),
+                    type_: Valid(gltf_json::accessor::Type::Vec3),
+                    min: Some(Value::from(Vec::from(min))),
+                    max: Some(Value::from(Vec::from(max))),
+                    normalized: false,
+                    sparse: None,
+                    name: None,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                });
                 while combined_buffer.len() % 4 != 0 {
                     combined_buffer.push(0);
                 }
 
-                if let Some(mesh) = scene_object.sculpt.mesh.as_ref() {
-                    let vertices_transformed: Vec<Vec3> =
-                        mesh.high_level_of_detail.vertices.clone();
-                    let (min, max) = bounding_coords(&vertices_transformed);
-
-                    let padded_vertex_bytes = to_padded_byte_vector(&vertices_transformed);
-                    while combined_buffer.len() % 4 != 0 {
-                        combined_buffer.push(0);
-                    }
-                    let vertex_offset = combined_buffer.len();
-                    let buffer_view = root.push(View {
-                        buffer,
-                        byte_length: USize64::from(padded_vertex_bytes.len()),
-                        byte_offset: Some(USize64::from(vertex_offset)),
-                        byte_stride: Some(Stride(mem::size_of::<Vec3>())),
-                        target: Some(Valid(Target::ArrayBuffer)),
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                        name: None,
-                    });
-                    combined_buffer.extend_from_slice(&padded_vertex_bytes);
-                    let positions_accessor = root.push(Accessor {
-                        buffer_view: Some(buffer_view),
-                        byte_offset: Some(USize64(0)),
-                        count: USize64::from(mesh.high_level_of_detail.vertices.len()),
-                        component_type: Valid(GenericComponentType(ComponentType::F32)),
-                        type_: Valid(gltf_json::accessor::Type::Vec3),
-                        min: Some(Value::from(Vec::from(min))),
-                        max: Some(Value::from(Vec::from(max))),
-                        normalized: false,
-                        sparse: None,
-                        name: None,
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                    });
-                    while combined_buffer.len() % 2 != 0 {
-                        combined_buffer.push(0);
-                    }
-
-                    let mut index_bytes =
-                        Vec::with_capacity(mesh.high_level_of_detail.indices.len() * 2);
-                    for index in &mesh.high_level_of_detail.indices {
-                        index_bytes.extend_from_slice(&index.to_le_bytes());
-                    }
-                    let index_view = root.push(View {
-                        buffer,
-                        byte_length: USize64::from(index_bytes.len()),
-                        byte_offset: Some(USize64::from(combined_buffer.len())),
-                        byte_stride: None,
-                        target: Some(Valid(Target::ElementArrayBuffer)),
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                        name: None,
-                    });
-                    combined_buffer.extend_from_slice(&index_bytes);
-                    while combined_buffer.len() % 4 != 0 {
-                        combined_buffer.push(0);
-                    }
-
-                    let index_accessor = root.push(Accessor {
-                        buffer_view: Some(index_view),
-                        byte_offset: Some(USize64(0)),
-                        count: USize64::from(mesh.high_level_of_detail.indices.len()),
-                        component_type: Valid(GenericComponentType(ComponentType::U16)),
-                        type_: Valid(gltf_json::accessor::Type::Scalar),
-                        normalized: false,
-                        sparse: None,
-                        name: None,
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                        min: None,
-                        max: None,
-                    });
-
-                    let mut joint_indices_bytes = Vec::new();
-                    let mut joint_weights_bytes = Vec::new();
-                    for vw in &mesh.high_level_of_detail.weights {
-                        let joints: Vec<u8> = vw
-                            .joint_name
-                            .iter()
-                            .filter_map(|j| {
-                                bones.iter().enumerate().find_map(|(i, joint_name)| {
-                                    if joint_name == j {
-                                        Some(i as u8)
-                                    } else {
-                                        None
-                                    }
-                                })
-                            })
-                            .collect();
-                        for (&joint, &weight) in joints.iter().zip(vw.weights.iter()) {
-                            joint_indices_bytes.extend_from_slice(&joint.to_le_bytes());
-                            joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
-                        }
-                    }
-                    for vw in &mesh.high_level_of_detail.weights {
-                        // resolve joint indices from joint names
-                        let joints: Vec<u8> = vw
-                            .joint_name
-                            .iter()
-                            .filter_map(|j| {
-                                bones.iter().enumerate().find_map(|(i, joint_name)| {
-                                    if joint_name == j {
-                                        Some(i as u8)
-                                    } else {
-                                        None
-                                    }
-                                })
-                            })
-                            .collect();
-
-                        let indices: [u8; 4] = joints.try_into().unwrap_or([0, 0, 0, 0]);
-
-                        for (&joint, &weight) in indices.iter().zip(vw.weights.iter()) {
-                            joint_indices_bytes.extend_from_slice(&joint.to_le_bytes());
-                            joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
-                        }
-                    }
-
-                    // --- joint indices view/accessor
-                    let joint_indices_view = root.push(View {
-                        buffer,
-                        byte_length: USize64::from(joint_indices_bytes.len()),
-                        byte_offset: Some(USize64::from(combined_buffer.len())),
-                        byte_stride: Some(Stride(4 * std::mem::size_of::<u8>())),
-                        target: Some(Valid(Target::ArrayBuffer)),
-                        extensions: None,
-                        extras: Default::default(),
-                        name: None,
-                    });
-                    combined_buffer.extend_from_slice(&joint_indices_bytes);
-                    let joint_indices_accessor = root.push(Accessor {
-                        buffer_view: Some(joint_indices_view),
-                        byte_offset: Some(USize64(0)),
-                        count: USize64::from(mesh.high_level_of_detail.weights.len()),
-                        component_type: Valid(GenericComponentType(ComponentType::U8)),
-                        type_: Valid(gltf_json::accessor::Type::Vec4),
-                        normalized: false,
-                        min: None,
-                        max: None,
-                        name: None,
-                        sparse: None,
-                        extensions: None,
-                        extras: Default::default(),
-                    });
-                    // --- joint weights view/accessor
-                    let joint_weights_view = root.push(View {
-                        buffer,
-                        byte_length: USize64::from(joint_weights_bytes.len()),
-                        byte_offset: Some(USize64::from(combined_buffer.len())),
-                        byte_stride: Some(Stride(4 * std::mem::size_of::<f32>())),
-                        target: Some(Valid(Target::ArrayBuffer)),
-                        extensions: None,
-                        extras: Default::default(),
-                        name: None,
-                    });
-                    combined_buffer.extend_from_slice(&joint_weights_bytes);
-                    let joint_weights_accessor = root.push(Accessor {
-                        buffer_view: Some(joint_weights_view),
-                        byte_offset: Some(USize64(0)),
-                        count: USize64::from(mesh.high_level_of_detail.weights.len()),
-                        component_type: Valid(GenericComponentType(ComponentType::F32)),
-                        type_: Valid(gltf_json::accessor::Type::Vec4),
-                        normalized: false,
-                        min: None,
-                        max: None,
-                        name: None,
-                        sparse: None,
-                        extensions: None,
-                        extras: Default::default(),
-                    });
-
-                    let mut attributes = BTreeMap::new();
-                    attributes.insert(Valid(Semantic::Positions), positions_accessor);
-                    attributes.insert(Valid(Semantic::Joints(0)), joint_indices_accessor);
-                    attributes.insert(Valid(Semantic::Weights(0)), joint_weights_accessor);
-
-                    let primitive = Primitive {
-                        attributes,
-                        indices: Some(index_accessor),
-                        material: None,
-                        mode: Valid(Mode::Triangles),
-                        targets: None,
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                    };
-
-                    let mesh_index = root.push(Mesh {
-                        primitives: vec![primitive],
-                        weights: None,
-                        extensions: Default::default(),
-                        extras: Default::default(),
-                        name: None,
-                    });
-
-                    let node_index = root.push(Node {
-                        mesh: Some(mesh_index),
-                        skin: None,
-                        children: None,
-                        name: Some(scene_object.name.to_string()),
-                        ..Default::default()
-                    });
-                    nodes.push(node_index);
+                let mut index_bytes =
+                    Vec::with_capacity(mesh.high_level_of_detail.indices.len() * 2);
+                for index in &mesh.high_level_of_detail.indices {
+                    index_bytes.extend_from_slice(&index.to_le_bytes());
                 }
-                combined_weights.push(
-                    scene_object
-                        .sculpt
-                        .mesh
-                        .unwrap()
-                        .high_level_of_detail
-                        .weights,
-                );
+                let index_view = root.push(View {
+                    buffer,
+                    byte_length: USize64::from(index_bytes.len()),
+                    byte_offset: Some(USize64::from(combined_buffer.len())),
+                    byte_stride: None,
+                    target: Some(Valid(Target::ElementArrayBuffer)),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    name: None,
+                });
+                combined_buffer.extend_from_slice(&index_bytes);
+                while combined_buffer.len() % 4 != 0 {
+                    combined_buffer.push(0);
+                }
+
+                let index_accessor = root.push(Accessor {
+                    buffer_view: Some(index_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(mesh.high_level_of_detail.indices.len()),
+                    component_type: Valid(GenericComponentType(ComponentType::U16)),
+                    type_: Valid(gltf_json::accessor::Type::Scalar),
+                    normalized: false,
+                    sparse: None,
+                    name: None,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    min: None,
+                    max: None,
+                });
+
+                let mut joint_indices_bytes = Vec::new();
+                let mut joint_weights_bytes = Vec::new();
+                for vw in &mesh.high_level_of_detail.weights {
+                    let joints: Vec<u8> = vw
+                        .joint_name
+                        .iter()
+                        .filter_map(|j| {
+                            bones.iter().enumerate().find_map(|(i, joint_name)| {
+                                if joint_name == j {
+                                    Some(i as u8)
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .collect();
+                    for (&joint, &weight) in joints.iter().zip(vw.weights.iter()) {
+                        joint_indices_bytes.extend_from_slice(&joint.to_le_bytes());
+                        joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
+                    }
+                }
+                for vw in &mesh.high_level_of_detail.weights {
+                    // resolve joint indices from joint names
+                    let joints: Vec<u8> = vw
+                        .joint_name
+                        .iter()
+                        .filter_map(|j| {
+                            bones.iter().enumerate().find_map(|(i, joint_name)| {
+                                if joint_name == j {
+                                    Some(i as u8)
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                        .collect();
+
+                    let indices: [u8; 4] = joints.try_into().unwrap_or([0, 0, 0, 0]);
+
+                    for (&joint, &weight) in indices.iter().zip(vw.weights.iter()) {
+                        joint_indices_bytes.extend_from_slice(&joint.to_le_bytes());
+                        joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
+                    }
+                }
+
+                let joint_indices_view = root.push(View {
+                    buffer,
+                    byte_length: USize64::from(joint_indices_bytes.len()),
+                    byte_offset: Some(USize64::from(combined_buffer.len())),
+                    byte_stride: Some(Stride(4 * std::mem::size_of::<u8>())),
+                    target: Some(Valid(Target::ArrayBuffer)),
+                    extensions: None,
+                    extras: Default::default(),
+                    name: None,
+                });
+                combined_buffer.extend_from_slice(&joint_indices_bytes);
+                let joint_indices_accessor = root.push(Accessor {
+                    buffer_view: Some(joint_indices_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(mesh.high_level_of_detail.weights.len()),
+                    component_type: Valid(GenericComponentType(ComponentType::U8)),
+                    type_: Valid(gltf_json::accessor::Type::Vec4),
+                    normalized: false,
+                    min: None,
+                    max: None,
+                    name: None,
+                    sparse: None,
+                    extensions: None,
+                    extras: Default::default(),
+                });
+                let joint_weights_view = root.push(View {
+                    buffer,
+                    byte_length: USize64::from(joint_weights_bytes.len()),
+                    byte_offset: Some(USize64::from(combined_buffer.len())),
+                    byte_stride: Some(Stride(4 * std::mem::size_of::<f32>())),
+                    target: Some(Valid(Target::ArrayBuffer)),
+                    extensions: None,
+                    extras: Default::default(),
+                    name: None,
+                });
+                combined_buffer.extend_from_slice(&joint_weights_bytes);
+                let joint_weights_accessor = root.push(Accessor {
+                    buffer_view: Some(joint_weights_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(mesh.high_level_of_detail.weights.len()),
+                    component_type: Valid(GenericComponentType(ComponentType::F32)),
+                    type_: Valid(gltf_json::accessor::Type::Vec4),
+                    normalized: false,
+                    min: None,
+                    max: None,
+                    name: None,
+                    sparse: None,
+                    extensions: None,
+                    extras: Default::default(),
+                });
+
+                let mut attributes = BTreeMap::new();
+                attributes.insert(Valid(Semantic::Positions), positions_accessor);
+                attributes.insert(Valid(Semantic::Joints(0)), joint_indices_accessor);
+                attributes.insert(Valid(Semantic::Weights(0)), joint_weights_accessor);
+
+                let primitive = Primitive {
+                    attributes,
+                    indices: Some(index_accessor),
+                    material: None,
+                    mode: Valid(Mode::Triangles),
+                    targets: None,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                };
+
+                let mesh_index = root.push(Mesh {
+                    primitives: vec![primitive],
+                    weights: None,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    name: None,
+                });
+
+                let node_index = root.push(Node {
+                    mesh: Some(mesh_index),
+                    skin: None,
+                    children: None,
+                    name: Some(scene_object.name.to_string()),
+                    ..Default::default()
+                });
+                nodes.push(node_index);
             }
+            combined_weights.push(
+                scene_object
+                    .sculpt
+                    .mesh
+                    .unwrap()
+                    .high_level_of_detail
+                    .weights,
+            );
         }
     }
 
@@ -341,7 +546,6 @@ pub fn bake_avatar(
     };
     let ibm_view_index = root.push(ibm_view);
 
-    // create accessor of type Mat4
     let ibm_accessor = Accessor {
         sparse: None,
         buffer_view: Some(ibm_view_index),
@@ -360,7 +564,6 @@ pub fn bake_avatar(
     };
     let ibm_accessor_index = root.push(ibm_accessor);
 
-    // create skin referencing the joint nodes and the ibm accessor
     let skin = Skin {
         joints: skeleton_nodes.clone(),
         inverse_bind_matrices: Some(ibm_accessor_index),
