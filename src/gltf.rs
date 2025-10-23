@@ -10,8 +10,8 @@ use gltf_json::{
     },
     Accessor, Index, Mesh, Node, Root, Scene, Skin, Value,
 };
-use metaverse_messages::utils::skeleton::Skeleton;
-use metaverse_messages::{capabilities::scene::SceneGroup, utils::skeleton::JointName};
+use metaverse_messages::utils::{render_data::RenderObject, skeleton::Skeleton};
+use metaverse_messages::{http::scene::SceneGroup, utils::skeleton::JointName};
 use rgb::bytemuck;
 use std::{
     borrow::Cow,
@@ -239,6 +239,18 @@ pub fn generate_model(
     Ok(())
 }
 
+pub fn generate_mesh(
+    object: RenderObject,
+    path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut builder = GltfBuilder::new("Combined Avatar");
+    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
+    builder.add_node_with_mesh(mesh_index, &object.name);
+    builder.finalize_scene(&format!("Scene"));
+    builder.finalize(&path)?;
+    Ok(())
+}
+
 // TODO: fix this, and put this info into the gltf builder struct.
 // this will be a lot of work :(
 pub fn bake_avatar(
@@ -343,7 +355,7 @@ pub fn bake_avatar(
 
                 let mut joint_indices_bytes = Vec::new();
                 let mut joint_weights_bytes = Vec::new();
-                for vw in &mesh.high_level_of_detail.weights {
+                for vw in mesh.high_level_of_detail.weights.as_ref().unwrap() {
                     let joints: Vec<u8> = vw
                         .joint_name
                         .iter()
@@ -362,7 +374,7 @@ pub fn bake_avatar(
                         joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
                     }
                 }
-                for vw in &mesh.high_level_of_detail.weights {
+                for vw in mesh.high_level_of_detail.weights.as_ref().unwrap() {
                     // resolve joint indices from joint names
                     let joints: Vec<u8> = vw
                         .joint_name
@@ -400,7 +412,7 @@ pub fn bake_avatar(
                 let joint_indices_accessor = root.push(Accessor {
                     buffer_view: Some(joint_indices_view),
                     byte_offset: Some(USize64(0)),
-                    count: USize64::from(mesh.high_level_of_detail.weights.len()),
+                    count: USize64::from(mesh.high_level_of_detail.weights.as_ref().unwrap().len()),
                     component_type: Valid(GenericComponentType(ComponentType::U8)),
                     type_: Valid(gltf_json::accessor::Type::Vec4),
                     normalized: false,
@@ -425,7 +437,7 @@ pub fn bake_avatar(
                 let joint_weights_accessor = root.push(Accessor {
                     buffer_view: Some(joint_weights_view),
                     byte_offset: Some(USize64(0)),
-                    count: USize64::from(mesh.high_level_of_detail.weights.len()),
+                    count: USize64::from(mesh.high_level_of_detail.weights.as_ref().unwrap().len()),
                     component_type: Valid(GenericComponentType(ComponentType::F32)),
                     type_: Valid(gltf_json::accessor::Type::Vec4),
                     normalized: false,
