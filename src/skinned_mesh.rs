@@ -1,3 +1,4 @@
+use metaverse_messages::utils::render_data::{AvatarObject, RenderObject};
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.
 use metaverse_messages::{http::scene::SceneGroup, utils::skeleton::Skeleton};
@@ -8,7 +9,17 @@ use std::{
     path::PathBuf,
 };
 
-use crate::gltf::{bake_avatar, generate_model};
+use crate::gltf::{bake_avatar, bake_avatar_2, generate_model};
+pub fn generate_skinned_mesh_2(
+    agent_object: PathBuf,
+    out_path: PathBuf,
+) -> Result<(), Box<dyn Error>> {
+    let json_str =
+        fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
+    let avatar: AvatarObject = serde_json::from_str(&json_str)
+        .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
+    bake_avatar_2(avatar, out_path)
+}
 
 pub fn generate_skinned_mesh(
     scene_paths: &Vec<PathBuf>,
