@@ -610,7 +610,9 @@ dependencies = [
 
 [[package]]
 name = "metaverse_messages"
-version = "0.1.3"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de40b6de7de2e6812f1a9128c9769246b5b29c63495c6cc98831296abf06fdef"
 dependencies = [
  "actix",
  "anyhow",
@@ -629,7 +631,7 @@ dependencies = [
  "quick-xml 0.38.3",
  "rgb",
  "serde",
- "serde-llsd",
+ "serde-llsd-benthic",
  "serde_json",
  "strum",
  "strum_macros",
@@ -897,8 +899,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-llsd"
-version = "0.3.6"
+name = "serde-llsd-benthic"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb69406b5d6405bb19334c5956481cf3c9f729f8598751bfc83878ea6140461"
 dependencies = [
  "anyhow",
  "ascii85",
