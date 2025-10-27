@@ -10,6 +10,6 @@ edition = "2024"
 glam = "0.30.8"
 gltf = "1.4.1"
 gltf-json = "1.4.1"
-metaverse_messages = "0.2.0"
+metaverse_messages = {path="../metaverse_client/crates/messages/"}
 rgb = "0.8.52"
 serde_json = "1.0.145"

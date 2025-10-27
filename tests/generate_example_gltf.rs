@@ -1,16 +1,10 @@
 // skeleton.rs dependencies
-use metaverse_gltf::{
-    gltf::generate_model,
-    skinned_mesh::{generate_mesh, generate_skinned_mesh},
-};
 use std::path::PathBuf;
+
+use metaverse_mesh::generate::{generate_mesh, generate_skinned_mesh};
 
 #[test]
 pub fn generate_example() {
-    let mut paths = Vec::new();
-    let mut skeleton_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    skeleton_path.push("tests/example_json/skeleton.json");
-
     let mut overalls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     overalls_path.push("tests/example_json/overalls.json");
     let mut shirt_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -18,7 +12,9 @@ pub fn generate_example() {
     let mut body_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     body_path.push("tests/example_json/body.json");
     let mut curves_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    curves_path.push("tests/example_json/curves.json");
+    curves_path.push("tests/example_json/hair.json");
+    let mut avatar_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    avatar_path.push("tests/example_json/avatar.json");
 
     let mut out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path.push("tests/generated/Combined.glb");
@@ -26,11 +22,10 @@ pub fn generate_example() {
     let mut out_path_boneless = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path_boneless.push("tests/generated/Boneless.glb");
 
-    paths.push(overalls_path);
-    paths.push(shirt_path);
-    paths.push(body_path);
-    paths.push(curves_path);
+    let mut out_path_boneless_body = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    out_path_boneless_body.push("tests/generated/BonelessBody.glb");
 
-    generate_skinned_mesh(&paths, skeleton_path, out_path);
-    generate_mesh(&paths, out_path_boneless);
+    generate_skinned_mesh(avatar_path, out_path);
+    generate_mesh(overalls_path, out_path_boneless);
+    generate_mesh(body_path, out_path_boneless_body);
 }
