@@ -611,8 +611,6 @@ dependencies = [
 [[package]]
 name = "metaverse_messages"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de40b6de7de2e6812f1a9128c9769246b5b29c63495c6cc98831296abf06fdef"
 dependencies = [
  "actix",
  "anyhow",
