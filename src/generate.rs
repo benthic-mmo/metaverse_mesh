@@ -16,7 +16,7 @@ pub fn generate_skinned_mesh(
         fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
     let avatar: AvatarObject = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
-    build_skinned_mesh_gltf(avatar, out_path)
+    build_skinned_mesh_gltf(avatar, out_path)    
 }
 pub fn generate_mesh(
     agent_object: PathBuf,

@@ -1,8 +1,9 @@
-use glam::{usize, Vec3};
+use glam::{usize, Quat, Vec3};
 use gltf_json::{
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
     mesh::{Mode, Primitive, Semantic},
+    scene::UnitQuaternion,
     validation::{
         Checked::{self, Valid},
         USize64,
@@ -270,19 +271,25 @@ impl GltfBuilder {
     }
 
     pub fn finalize_scene(&mut self, name: &str) {
-        // Root node containing all scene nodes
-        let root_node_index = self.root.push(Node {
+        // Rotate 90° around X-axis
+        let rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+
+        // Wrap existing nodes under this rotated root
+        let rotated_root_index = self.root.push(Node {
             children: Some(self.nodes.clone()),
-            name: Some(format!("{name}_root")),
+            name: Some("RotatedRoot".to_string()),
+            rotation: Some(UnitQuaternion([
+                rotation.x, rotation.y, rotation.z, rotation.w,
+            ])),
             ..Default::default()
         });
 
-        // Push the scene referencing that root node
+        // Create scene referencing rotated root
         self.root.push(Scene {
+            nodes: vec![rotated_root_index],
+            name: Some(format!("{}_rotated_scene", name)),
             extensions: Default::default(),
             extras: Default::default(),
-            name: Some(name.to_string()),
-            nodes: vec![root_node_index],
         });
 
         // clear for potential next scene
@@ -320,18 +327,24 @@ pub fn build_mesh_gltf(
     Ok(())
 }
 
-pub fn build_mesh_scene_gltf(objects: Vec<RenderObject>, path: PathBuf) -> Result<(), Box<dyn std::error::Error>>{
+pub fn build_mesh_scene_gltf(
+    objects: Vec<RenderObject>,
+    path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
-    for object in objects{
+    for object in objects {
         let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
-        builder.add_node_with_mesh(mesh_index, &object.name); 
+        builder.add_node_with_mesh(mesh_index, &object.name);
     }
     builder.finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
     Ok(())
 }
 
-pub fn build_skinned_mesh_gltf(avatar: AvatarObject, path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+pub fn build_skinned_mesh_gltf(
+    avatar: AvatarObject,
+    path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut bones: BTreeSet<JointName> = BTreeSet::new();
     let mut builder = GltfBuilder::new("Combined Avatar");
 
