@@ -1,7 +1,7 @@
 // skeleton.rs dependencies
 use std::path::PathBuf;
 
-use metaverse_mesh::skinned_mesh::{generate_mesh, generate_skinned_mesh};
+use metaverse_mesh::generate::{generate_mesh, generate_skinned_mesh};
 
 #[test]
 pub fn generate_example() {
