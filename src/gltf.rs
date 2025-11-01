@@ -2,6 +2,7 @@ use glam::{usize, Quat, Vec3};
 use gltf_json::{
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
+    image::MimeType,
     material::{PbrMetallicRoughness, StrengthFactor},
     mesh::{Mode, Primitive, Semantic},
     scene::UnitQuaternion,
@@ -232,18 +233,26 @@ impl GltfBuilder {
         name: &str,
         positions: &[Vec3],
         indices: &[u16],
+        uvs: Option<&[[f32; 2]]>,
+        material: Option<Index<Material>>,
     ) -> gltf_json::Index<gltf_json::Mesh> {
         let pos_accessor = self.add_vertex_positions(positions);
         let index_accessor = self.add_indices(indices);
 
-        let attributes = [(Valid(Semantic::Positions), pos_accessor)]
-            .into_iter()
-            .collect();
+        let mut attributes: std::collections::BTreeMap<_, _> =
+            [(Valid(Semantic::Positions), pos_accessor)]
+                .into_iter()
+                .collect();
+
+        if let Some(uvs) = uvs {
+            let uv_accessor = self.add_uvs(uvs);
+            attributes.insert(Valid(Semantic::TexCoords(0)), uv_accessor);
+        }
 
         let primitive = Primitive {
             attributes,
             indices: Some(index_accessor),
-            material: None,
+            material,
             mode: Valid(Mode::Triangles),
             targets: None,
             extensions: Default::default(),
@@ -271,7 +280,7 @@ impl GltfBuilder {
         });
         self.nodes.push(node_index);
     }
-    pub fn add_uvs(&mut self, uvs: &[[f32; 2]]) -> gltf_json::Index<gltf_json::Accessor> {
+    pub fn add_uvs(&mut self, uvs: &[[f32; 2]]) -> Index<Accessor> {
         let bytes: Vec<u8> = bytemuck::cast_slice(uvs).to_vec();
         self.align_4();
 
@@ -301,16 +310,40 @@ impl GltfBuilder {
 
     pub fn add_texture(
         &mut self,
-        image_path: &str,
+        image_path: &PathBuf,
     ) -> (
-        gltf_json::Index<gltf_json::Image>,
-        gltf_json::Index<gltf_json::Texture>,
-        gltf_json::Index<gltf_json::Material>,
+        Index<gltf_json::Image>,
+        Index<gltf_json::Texture>,
+        Index<gltf_json::Material>,
     ) {
+        let image_data = fs::read(image_path).expect("Failed to read image file");
+
+        self.align_4();
+
+        let buffer_byte_offset = self.combined_buffer.len() as u64;
+        self.combined_buffer.extend_from_slice(&image_data);
+
+        let buffer_view_index = self.root.push(View {
+            buffer: Index::new(0),
+            byte_length: image_data.len().into(),
+            byte_offset: Some(USize64(buffer_byte_offset)),
+            byte_stride: None,
+            target: None,
+            name: Some("image_buffer_view".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let mime_type = if image_path.extension().and_then(|s| s.to_str()) == Some("png") {
+            MimeType("image/png".to_string())
+        } else {
+            MimeType("image/jpeg".to_string())
+        };
+
         let image_index = self.root.push(gltf_json::Image {
-            uri: Some(image_path.to_string()),
-            mime_type: None,
-            buffer_view: None,
+            uri: None,
+            mime_type: Some(mime_type),
+            buffer_view: Some(buffer_view_index),
             name: Some("diffuse".to_string()),
             extensions: Default::default(),
             extras: Default::default(),
@@ -342,6 +375,7 @@ impl GltfBuilder {
 
         (image_index, texture_index, material_index)
     }
+
     pub fn rotated_finalize_scene(&mut self, name: &str) {
         let rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
 
@@ -410,10 +444,8 @@ pub fn build_mesh_gltf(
     path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
-    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
+    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices, None, None);
     builder.add_node_with_mesh(mesh_index, &object.name);
-
-    builder.add_uvs(&object.uv.unwrap());
     builder.finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
     Ok(())
@@ -424,7 +456,7 @@ pub fn build_mesh_y_up(
     path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
-    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
+    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices, None, None);
     builder.add_node_with_mesh(mesh_index, &object.name);
     builder.rotated_finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
@@ -437,10 +469,27 @@ pub fn build_mesh_scene_gltf(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
     for object in objects {
-        let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
+        let (uvs, _texture, material) =
+            if let (Some(uv), Some(tex)) = (object.uv.as_ref(), object.texture.as_ref()) {
+                let uv_accessor = uv.clone();
+                let (_image_index, texture_index, material_index) = builder.add_texture(tex);
+                (Some(uv_accessor), Some(texture_index), Some(material_index))
+            } else {
+                (None, None, None)
+            };
+        builder.add_uvs(&object.uv.unwrap());
+        builder.add_texture(&object.texture.unwrap());
+        let mesh_index = builder.add_mesh(
+            &object.name,
+            &object.vertices,
+            &object.indices,
+            uvs.as_deref(),
+            material,
+        );
+
         builder.add_node_with_mesh(mesh_index, &object.name);
     }
-    builder.finalize_scene(&format!("Scene"));
+    builder.rotated_finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
     Ok(())
 }
@@ -463,7 +512,21 @@ pub fn build_skinned_mesh_gltf(
         let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
 
         for part in parts {
-            let mesh_index = builder.add_mesh(&part.name, &part.vertices, &part.indices);
+            let (uvs, _texture, material) =
+                if let (Some(uv), Some(tex)) = (part.uv.as_ref(), part.texture.as_ref()) {
+                    let uv_accessor = uv.clone();
+                    let (_image_index, texture_index, material_index) = builder.add_texture(tex);
+                    (Some(uv_accessor), Some(texture_index), Some(material_index))
+                } else {
+                    (None, None, None)
+                };
+            let mesh_index = builder.add_mesh(
+                &part.name,
+                &part.vertices,
+                &part.indices,
+                uvs.as_deref(),
+                material,
+            );
             builder.add_node_with_mesh(mesh_index, &part.name);
             builder.add_joint_data(part.skin.unwrap().weights, &bones);
         }
