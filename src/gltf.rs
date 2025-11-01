@@ -2,13 +2,15 @@ use glam::{usize, Quat, Vec3};
 use gltf_json::{
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
+    material::{PbrMetallicRoughness, StrengthFactor},
     mesh::{Mode, Primitive, Semantic},
     scene::UnitQuaternion,
+    texture,
     validation::{
         Checked::{self, Valid},
         USize64,
     },
-    Accessor, Index, Mesh, Node, Scene, Value,
+    Accessor, Index, Material, Mesh, Node, Scene, Value,
 };
 use metaverse_messages::utils::render_data::RenderObject;
 use metaverse_messages::utils::skeleton::JointName;
@@ -269,9 +271,78 @@ impl GltfBuilder {
         });
         self.nodes.push(node_index);
     }
+    pub fn add_uvs(&mut self, uvs: &[[f32; 2]]) -> gltf_json::Index<gltf_json::Accessor> {
+        let bytes: Vec<u8> = bytemuck::cast_slice(uvs).to_vec();
+        self.align_4();
 
-    pub fn finalize_scene(&mut self, name: &str) {
-        // Rotate 90° around X-axis
+        let view = self.push_view(
+            bytes.len(),
+            Some(std::mem::size_of::<[f32; 2]>()),
+            Some(Checked::Valid(Target::ArrayBuffer)),
+            "uvs".to_string(),
+        );
+        self.combined_buffer.extend_from_slice(&bytes);
+
+        self.root.push(gltf_json::Accessor {
+            buffer_view: Some(view),
+            byte_offset: Some(USize64(0)),
+            count: USize64::from(uvs.len()),
+            component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
+            type_: Checked::Valid(gltf_json::accessor::Type::Vec2),
+            min: None,
+            max: None,
+            normalized: false,
+            sparse: None,
+            name: Some("TEXCOORD_0".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        })
+    }
+
+    pub fn add_texture(
+        &mut self,
+        image_path: &str,
+    ) -> (
+        gltf_json::Index<gltf_json::Image>,
+        gltf_json::Index<gltf_json::Texture>,
+        gltf_json::Index<gltf_json::Material>,
+    ) {
+        let image_index = self.root.push(gltf_json::Image {
+            uri: Some(image_path.to_string()),
+            mime_type: None,
+            buffer_view: None,
+            name: Some("diffuse".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let texture_index = self.root.push(gltf_json::Texture {
+            sampler: None,
+            source: image_index,
+            name: Some("diffuse_texture".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let material_index = self.root.push(Material {
+            pbr_metallic_roughness: PbrMetallicRoughness {
+                base_color_texture: Some(texture::Info {
+                    index: texture_index,
+                    tex_coord: 0,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                }),
+                metallic_factor: StrengthFactor(0.0),
+                roughness_factor: StrengthFactor(1.0),
+                ..Default::default()
+            },
+            name: Some("material_with_texture".to_string()),
+            ..Default::default()
+        });
+
+        (image_index, texture_index, material_index)
+    }
+    pub fn rotated_finalize_scene(&mut self, name: &str) {
         let rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
 
         // Wrap existing nodes under this rotated root
@@ -290,6 +361,25 @@ impl GltfBuilder {
             name: Some(format!("{}_rotated_scene", name)),
             extensions: Default::default(),
             extras: Default::default(),
+        });
+
+        self.nodes.clear();
+    }
+
+    pub fn finalize_scene(&mut self, name: &str) {
+        // Root node containing all scene nodes
+        let root_node_index = self.root.push(Node {
+            children: Some(self.nodes.clone()),
+            name: Some(format!("{name}_root")),
+            ..Default::default()
+        });
+
+        // Push the scene referencing that root node
+        self.root.push(Scene {
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: Some(name.to_string()),
+            nodes: vec![root_node_index],
         });
 
         // clear for potential next scene
@@ -322,7 +412,21 @@ pub fn build_mesh_gltf(
     let mut builder = GltfBuilder::new("Combined Avatar");
     let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
     builder.add_node_with_mesh(mesh_index, &object.name);
+
+    builder.add_uvs(&object.uv.unwrap());
     builder.finalize_scene(&format!("Scene"));
+    builder.finalize(&path)?;
+    Ok(())
+}
+
+pub fn build_mesh_y_up(
+    object: RenderObject,
+    path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut builder = GltfBuilder::new("Combined Avatar");
+    let mesh_index = builder.add_mesh(&object.name, &object.vertices, &object.indices);
+    builder.add_node_with_mesh(mesh_index, &object.name);
+    builder.rotated_finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
     Ok(())
 }
@@ -364,7 +468,7 @@ pub fn build_skinned_mesh_gltf(
             builder.add_joint_data(part.skin.unwrap().weights, &bones);
         }
     }
-    builder.finalize_scene(&format!("Scene"));
+    builder.rotated_finalize_scene(&format!("Scene"));
     builder.finalize(&path)?;
     Ok(())
 }
