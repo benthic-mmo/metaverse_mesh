@@ -15,17 +15,19 @@ pub fn generate_example() {
     curves_path.push("tests/example_json/hair.json");
     let mut avatar_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     avatar_path.push("tests/example_json/avatar.json");
+    let mut button_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    button_path.push("tests/example_json/button.json");
 
     let mut out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path.push("tests/generated/Combined.glb");
-
     let mut out_path_boneless = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path_boneless.push("tests/generated/Boneless.glb");
-
     let mut out_path_boneless_body = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path_boneless_body.push("tests/generated/BonelessBody.glb");
+    let mut out_path_button = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    out_path_button.push("tests/generated/Button.glb");
 
-    generate_skinned_mesh(avatar_path, out_path);
-    generate_mesh(overalls_path, out_path_boneless);
-    generate_mesh(body_path, out_path_boneless_body);
+    generate_skinned_mesh(avatar_path, out_path).unwrap();
+    generate_mesh(overalls_path, out_path_boneless).unwrap();
+    generate_mesh(body_path, out_path_boneless_body).unwrap();
 }
