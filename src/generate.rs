@@ -32,6 +32,18 @@ pub fn generate_mesh(
     Ok(())
 }
 
+pub fn generate_object_mesh(
+    agent_object: PathBuf,
+    out_path: PathBuf,
+) -> Result<(), Box<dyn Error>> {
+    let json_str =
+        fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
+    let object: RenderObject = serde_json::from_str(&json_str)
+        .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
+    build_mesh_scene_gltf(vec![object], out_path)?;
+    Ok(())
+}
+
 #[unsafe(no_mangle)]
 /// Allow external projects to generate skinned mesh. This will return the string of where the file
 /// was generated on disk!
