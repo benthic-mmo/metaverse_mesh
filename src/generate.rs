@@ -1,13 +1,14 @@
-use metaverse_messages::utils::render_data::{AvatarObject, RenderObject};
+use benthic_default_assets::render_data::{AvatarObject, RenderObject};
+
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.
+use crate::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
 use std::error::Error;
 use std::{
     ffi::{CStr, c_char},
     fs,
     path::PathBuf,
 };
-use crate::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
 pub fn generate_skinned_mesh(
     agent_object: PathBuf,
     out_path: PathBuf,
@@ -16,14 +17,10 @@ pub fn generate_skinned_mesh(
         fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
     let avatar: AvatarObject = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
-    build_skinned_mesh_gltf(avatar, out_path)    
+    build_skinned_mesh_gltf(avatar, out_path)
 }
 
-
-pub fn generate_mesh(
-    agent_object: PathBuf,
-    out_path: PathBuf,
-) -> Result<(), Box<dyn Error>> {
+pub fn generate_mesh(agent_object: PathBuf, out_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let json_str =
         fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
     let avatar: Vec<RenderObject> = serde_json::from_str(&json_str)

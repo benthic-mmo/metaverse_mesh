@@ -1,3 +1,5 @@
+use benthic_default_assets::render_data::{AvatarObject, JointWeight, RenderObject};
+use benthic_default_assets::skeleton::JointName;
 use glam::{usize, Quat, Vec3};
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
@@ -14,9 +16,6 @@ use gltf_json::{
     },
     Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
 };
-use metaverse_messages::utils::render_data::RenderObject;
-use metaverse_messages::utils::skeleton::JointName;
-use metaverse_messages::{http::mesh::JointWeight, utils::render_data::AvatarObject};
 use rgb::bytemuck;
 use std::{
     borrow::Cow,
@@ -142,19 +141,25 @@ impl GltfBuilder {
         joint_to_node: &HashMap<JointName, Index<Node>>,
     ) {
         use gltf_json::*;
+
+        // --- Input accessor (time) ---
         let mut input_bytes = Vec::new(); // time 0
         input_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        self.align_4();
+        let input_offset = self.combined_buffer.len();
+        self.combined_buffer.extend_from_slice(&input_bytes);
+
         let input_view = self.root.push(View {
             buffer: self.buffer_index,
-            byte_length: USize64(4),
-            byte_offset: Some(USize64(self.combined_buffer.len() as u64)),
+            byte_length: input_bytes.len().into(),
+            byte_offset: Some(USize64(input_offset as u64)),
             byte_stride: None,
             target: None,
             name: Some("animation_input".to_string()),
             extensions: Default::default(),
             extras: Default::default(),
         });
-        self.combined_buffer.extend_from_slice(&input_bytes);
+
         let input_accessor = self.root.push(Accessor {
             buffer_view: Some(input_view),
             byte_offset: Some(USize64(0)),
@@ -162,8 +167,8 @@ impl GltfBuilder {
             component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
             type_: Checked::Valid(accessor::Type::Scalar),
             normalized: false,
-            min: None,
-            max: None,
+            min: Some(Value::from(vec![0.0])),
+            max: Some(Value::from(vec![0.0])),
             sparse: None,
             name: Some("time_0".to_string()),
             extensions: Default::default(),
@@ -173,13 +178,14 @@ impl GltfBuilder {
         let mut channels = Vec::new();
         let mut samplers = Vec::new();
 
+        // --- Per-joint bind pose ---
         for joint_name in bones {
             let node_index = joint_to_node[joint_name];
             let joint = &avatar.global_skeleton.joints[joint_name];
             let last_transform = joint.local_transforms.last().unwrap().transform;
             let (scale, rotation, translation) = last_transform.to_scale_rotation_translation();
 
-            // Helper to push accessor
+            // Helper to push Vec3 accessor
             let push_accessor_vec3 =
                 |builder: &mut GltfBuilder, vec: Vec3, name: &str| -> Index<Accessor> {
                     let bytes: Vec<u8> = bytemuck::cast_slice(&[[vec.x, vec.y, vec.z]]).to_vec();
@@ -203,19 +209,20 @@ impl GltfBuilder {
                         component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
                         type_: Checked::Valid(accessor::Type::Vec3),
                         normalized: false,
+                        min: Some(Value::from([vec.x, vec.y, vec.z])),
+                        max: Some(Value::from([vec.x, vec.y, vec.z])),
                         sparse: None,
                         name: Some(name.to_string()),
                         extensions: Default::default(),
                         extras: Default::default(),
-                        min: None,
-                        max: None,
                     })
                 };
 
+            // Helper to push Vec4 accessor (quaternion)
+
             let push_accessor_quat =
-                |builder: &mut GltfBuilder, q: UnitQuaternion, name: &str| -> Index<Accessor> {
-                    let bytes: Vec<u8> =
-                        bytemuck::cast_slice(&[[q.0[0], q.0[1], q.0[2], q.0[3]]]).to_vec();
+                |builder: &mut GltfBuilder, q: Quat, name: &str| -> Index<Accessor> {
+                    let bytes: Vec<u8> = bytemuck::cast_slice(&[[q.x, q.y, q.z, q.w]]).to_vec();
                     builder.align_4();
                     let offset = builder.combined_buffer.len();
                     builder.combined_buffer.extend_from_slice(&bytes);
@@ -236,21 +243,18 @@ impl GltfBuilder {
                         component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
                         type_: Checked::Valid(accessor::Type::Vec4),
                         normalized: false,
+                        min: Some(Value::from([q.x, q.y, q.z, q.w])),
+                        max: Some(Value::from([q.x, q.y, q.z, q.w])),
                         sparse: None,
                         name: Some(name.to_string()),
                         extensions: Default::default(),
                         extras: Default::default(),
-                        min: None,
-                        max: None,
                     })
                 };
 
             let t_acc = push_accessor_vec3(self, translation.into(), &format!("{}_T", joint_name));
-            let r_acc = push_accessor_quat(
-                self,
-                UnitQuaternion([rotation.x, rotation.y, rotation.z, rotation.w]),
-                &format!("{}_R", joint_name),
-            );
+
+            let r_acc = push_accessor_quat(self, rotation, &format!("{}_R", joint_name));
             let s_acc = push_accessor_vec3(self, scale.into(), &format!("{}_S", joint_name));
 
             for (path_str, acc) in &[
@@ -740,7 +744,6 @@ pub fn build_skinned_mesh_gltf(
     let mut builder = GltfBuilder::new("Combined Avatar");
     let mut bones: BTreeSet<JointName> = BTreeSet::new();
 
-    // 1️⃣ Collect bones (joints with multiple transforms)
     for (joint_name, joint) in &avatar.global_skeleton.joints {
         if joint.transforms.len() > 1 {
             bones.insert(*joint_name);
