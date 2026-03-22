@@ -1,7 +1,6 @@
 use benthic_default_assets::render_data::{AvatarObject, JointWeight, RenderObject};
 use benthic_default_assets::skeleton::JointName;
 use glam::{usize, Quat, Vec3};
-use gltf::image;
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
     accessor::{ComponentType, GenericComponentType},
@@ -542,7 +541,6 @@ impl GltfBuilder {
         Index<gltf_json::Texture>,
         Index<gltf_json::Material>,
     ) {
-        println!("{:?}", image_path);
         let image_data = fs::read(image_path).expect("Failed to read image file");
 
         self.align_4();
@@ -760,15 +758,11 @@ pub fn build_skinned_mesh_gltf(
         let json_str = fs::read_to_string(&object)?;
         let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
 
-        println!("WAAAWAWAWAWWA2 {:?}", object);
         for part in parts {
             // Handle texture & UVs
             let (uvs, _texture, material) =
                 if let (Some(uv), Some(tex)) = (part.uv.as_ref(), part.texture.as_ref()) {
-                    println!("1");
                     let (_image_index, _texture_index, material_index) = builder.add_texture(tex);
-
-                    println!("1");
                     (Some(uv), Some(_texture_index), Some(material_index))
                 } else {
                     (None, None, None)
@@ -917,6 +911,7 @@ pub fn build_skinned_mesh_gltf(
         ),
         ..Default::default()
     });
+
     builder.root.push(Scene {
         name: Some("AvatarScene".to_string()),
         nodes: vec![scene_root_index],
