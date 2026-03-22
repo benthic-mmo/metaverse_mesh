@@ -13,3 +13,4 @@ gltf-json = "1.4.1"
 benthic_default_assets = {path = "../benthic_default_assets/"}
 rgb = "0.8.53"
 serde_json = "1.0.149"
+regex = "1.12.3"
