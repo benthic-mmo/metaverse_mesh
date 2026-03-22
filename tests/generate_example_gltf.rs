@@ -1,8 +1,24 @@
 // skeleton.rs dependencies
-use std::{fs, path::PathBuf};
-
+use bevy::prelude::{PluginGroup, Startup};
+use bevy::{
+    app::App,
+    asset::{AssetMode, AssetPlugin, AssetServer},
+    camera::Camera3d,
+    ecs::{
+        name::Name,
+        system::{Commands, Res},
+    },
+    gltf::GltfAssetLabel,
+    light::DirectionalLight,
+    scene::SceneRoot,
+    transform::components::Transform,
+    winit::WinitPlugin,
+    DefaultPlugins,
+};
+use glam::Vec3;
 use metaverse_mesh::generate::{generate_mesh, generate_skinned_mesh};
 use regex::Regex;
+use std::{fs, path::PathBuf};
 
 fn replace_textures_regex(original: &PathBuf, out_dir: &PathBuf) -> PathBuf {
     let json_str =
@@ -93,4 +109,60 @@ pub fn generate_example() {
     generate_skinned_mesh(test_avatar_path, out_path).unwrap();
     generate_mesh(new_overalls_path, out_path_boneless).unwrap();
     generate_mesh(new_body_path, out_path_boneless_body).unwrap();
+}
+
+#[test]
+fn display_generated_models() {
+    let mut app = App::new();
+
+    // Point Bevy to your generated assets folder
+
+    app.add_plugins(
+        DefaultPlugins
+            .set(WinitPlugin {
+                run_on_any_thread: true,
+            })
+            .set(AssetPlugin {
+                file_path: "tests/generated".to_string(),
+                mode: AssetMode::Unprocessed,
+                ..Default::default()
+            }),
+    );
+
+    app.add_systems(Startup, setup);
+
+    app.run();
+}
+
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    // Camera
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 1.0, 5.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+    ));
+
+    // Light
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(3.0, 5.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Load your generated GLBs
+    commands.spawn((
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Combined.glb"))),
+        Transform::from_xyz(0.0, 0.0, 0.0),
+        Name::new("Combined"),
+    ));
+
+    commands.spawn((
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Boneless.glb"))),
+        Transform::from_xyz(-2.0, 0.0, 0.0),
+        Name::new("Boneless"),
+    ));
+
+    commands.spawn((
+        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("BonelessBody.glb"))),
+        Transform::from_xyz(2.0, 0.0, 0.0),
+        Name::new("BonelessBody"),
+    ));
 }
