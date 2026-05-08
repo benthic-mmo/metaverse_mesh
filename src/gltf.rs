@@ -1,4 +1,7 @@
+use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
+use benthic_protocol::skeleton::JointName;
 use glam::{usize, Quat, Vec3};
+use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
@@ -13,9 +16,6 @@ use gltf_json::{
     },
     Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
 };
-use metaverse_messages::utils::render_data::RenderObject;
-use metaverse_messages::utils::skeleton::JointName;
-use metaverse_messages::{http::mesh::JointWeight, utils::render_data::AvatarObject};
 use rgb::bytemuck;
 use std::{
     borrow::Cow,
@@ -134,45 +134,219 @@ impl GltfBuilder {
             max: None,
         })
     }
+    pub fn add_bind_pose_animation(
+        &mut self,
+        avatar: &AvatarObject,
+        bones: &BTreeSet<JointName>,
+        joint_to_node: &HashMap<JointName, Index<Node>>,
+    ) {
+        use gltf_json::*;
+        let mut input_bytes = Vec::new();
+        input_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+        self.align_4();
+        let input_offset = self.combined_buffer.len();
+        self.combined_buffer.extend_from_slice(&input_bytes);
 
-    /// Adds joint indices and weights for a skinned mesh, returns (indices_accessor, weights_accessor)
+        let input_view = self.root.push(View {
+            buffer: self.buffer_index,
+            byte_length: input_bytes.len().into(),
+            byte_offset: Some(USize64(input_offset as u64)),
+            byte_stride: None,
+            target: None,
+            name: Some("animation_input".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let input_accessor = self.root.push(Accessor {
+            buffer_view: Some(input_view),
+            byte_offset: Some(USize64(0)),
+            count: USize64(1),
+            component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
+            type_: Checked::Valid(accessor::Type::Scalar),
+            normalized: false,
+            min: Some(Value::from(vec![0.0])),
+            max: Some(Value::from(vec![0.0])),
+            sparse: None,
+            name: Some("time_0".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let mut channels = Vec::new();
+        let mut samplers = Vec::new();
+
+        // --- Per-joint bind pose ---
+        for joint_name in bones {
+            let node_index = joint_to_node[joint_name];
+            let joint = &avatar.global_skeleton.joints[joint_name];
+            let last_transform = joint.local_transforms.last().unwrap().transform;
+            let (scale, rotation, translation) = last_transform.to_scale_rotation_translation();
+
+            // Helper to push Vec3 accessor
+            let push_accessor_vec3 =
+                |builder: &mut GltfBuilder, vec: Vec3, name: &str| -> Index<Accessor> {
+                    let bytes: Vec<u8> = bytemuck::cast_slice(&[[vec.x, vec.y, vec.z]]).to_vec();
+                    builder.align_4();
+                    let offset = builder.combined_buffer.len();
+                    builder.combined_buffer.extend_from_slice(&bytes);
+                    let view = builder.root.push(View {
+                        buffer: builder.buffer_index,
+                        byte_length: bytes.len().into(),
+                        byte_offset: Some(USize64(offset as u64)),
+                        byte_stride: None,
+                        target: None,
+                        name: Some(name.to_string()),
+                        extensions: Default::default(),
+                        extras: Default::default(),
+                    });
+                    builder.root.push(Accessor {
+                        buffer_view: Some(view),
+                        byte_offset: Some(USize64(0)),
+                        count: USize64(1),
+                        component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
+                        type_: Checked::Valid(accessor::Type::Vec3),
+                        normalized: false,
+                        min: Some(Value::from([vec.x, vec.y, vec.z])),
+                        max: Some(Value::from([vec.x, vec.y, vec.z])),
+                        sparse: None,
+                        name: Some(name.to_string()),
+                        extensions: Default::default(),
+                        extras: Default::default(),
+                    })
+                };
+
+            // Helper to push Vec4 accessor (quaternion)
+
+            let push_accessor_quat =
+                |builder: &mut GltfBuilder, q: Quat, name: &str| -> Index<Accessor> {
+                    let bytes: Vec<u8> = bytemuck::cast_slice(&[[q.x, q.y, q.z, q.w]]).to_vec();
+                    builder.align_4();
+                    let offset = builder.combined_buffer.len();
+                    builder.combined_buffer.extend_from_slice(&bytes);
+                    let view = builder.root.push(View {
+                        buffer: builder.buffer_index,
+                        byte_length: bytes.len().into(),
+                        byte_offset: Some(USize64(offset as u64)),
+                        byte_stride: None,
+                        target: None,
+                        name: Some(name.to_string()),
+                        extensions: Default::default(),
+                        extras: Default::default(),
+                    });
+                    builder.root.push(Accessor {
+                        buffer_view: Some(view),
+                        byte_offset: Some(USize64(0)),
+                        count: USize64(1),
+                        component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
+                        type_: Checked::Valid(accessor::Type::Vec4),
+                        normalized: false,
+                        min: Some(Value::from([q.x, q.y, q.z, q.w])),
+                        max: Some(Value::from([q.x, q.y, q.z, q.w])),
+                        sparse: None,
+                        name: Some(name.to_string()),
+                        extensions: Default::default(),
+                        extras: Default::default(),
+                    })
+                };
+
+            let t_acc = push_accessor_vec3(self, translation.into(), &format!("{}_T", joint_name));
+
+            let r_acc = push_accessor_quat(self, rotation, &format!("{}_R", joint_name));
+            let s_acc = push_accessor_vec3(self, scale.into(), &format!("{}_S", joint_name));
+
+            for (path_str, acc) in &[
+                ("translation", t_acc),
+                ("rotation", r_acc),
+                ("scale", s_acc),
+            ] {
+                let sampler_index = samplers.len();
+                samplers.push(Sampler {
+                    input: input_accessor,
+                    interpolation: Valid(Interpolation::Step),
+                    output: *acc,
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                });
+                channels.push(Channel {
+                    sampler: Index::new(sampler_index as u32),
+                    target: ChannelTarget {
+                        node: node_index,
+                        path: match *path_str {
+                            "translation" => Valid(Property::Translation),
+                            "rotation" => Valid(Property::Rotation),
+                            "scale" => Valid(Property::Scale),
+                            _ => panic!("invalid path"),
+                        },
+                        extensions: Default::default(),
+                        extras: Default::default(),
+                    },
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                });
+            }
+        }
+
+        self.root.push(Animation {
+            name: Some("BindPose".to_string()),
+            channels,
+            samplers,
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+    }
     fn add_joint_data(
         &mut self,
         skin_weights: Vec<JointWeight>,
-        bones: &BTreeSet<metaverse_messages::utils::skeleton::JointName>,
+        bones: &BTreeSet<JointName>,
     ) -> (Option<Index<Accessor>>, Option<Index<Accessor>>) {
         if skin_weights.is_empty() {
             return (None, None);
         }
+
+        let bone_index: HashMap<JointName, u8> = bones
+            .iter()
+            .enumerate()
+            .map(|(i, j)| (*j, i as u8))
+            .collect();
+
         let mut joint_indices_bytes = Vec::new();
         let mut joint_weights_bytes = Vec::new();
 
         for vw in &skin_weights {
-            let joints: Vec<u8> = vw
-                .joint_name
-                .iter()
-                .filter_map(|j| {
-                    bones.iter().enumerate().find_map(|(i, joint_name)| {
-                        if joint_name == j {
-                            Some(i as u8)
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .collect();
+            let mut joints = [0u8; 4];
+            let mut weights = [0.0f32; 4];
 
-            for (&joint, &weight) in joints.iter().zip(&vw.weights) {
-                joint_indices_bytes.push(joint);
-                joint_weights_bytes.extend_from_slice(&weight.to_le_bytes());
+            for i in 0..4 {
+                if let (Some(joint_name), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
+                {
+                    if weight > 0.0 {
+                        if let Some(&idx) = bone_index.get(joint_name) {
+                            joints[i] = idx;
+                            weights[i] = weight;
+                        }
+                    }
+                }
+            }
+
+            // Optional but recommended normalization
+            let sum: f32 = weights.iter().sum();
+            if sum > 0.0 {
+                for w in &mut weights {
+                    *w /= sum;
+                }
+            }
+
+            joint_indices_bytes.extend_from_slice(&joints);
+            for w in &weights {
+                joint_weights_bytes.extend_from_slice(&w.to_le_bytes());
             }
         }
 
-        while self.combined_buffer.len() % 4 != 0 {
-            self.combined_buffer.push(0);
-        }
+        self.align_4();
         let indices_offset = self.combined_buffer.len();
         self.combined_buffer.extend_from_slice(&joint_indices_bytes);
+
         let indices_view = self.root.push(View {
             buffer: self.buffer_index,
             byte_length: USize64::from(joint_indices_bytes.len()),
@@ -181,8 +355,9 @@ impl GltfBuilder {
             target: Some(Checked::Valid(Target::ArrayBuffer)),
             extensions: None,
             extras: Default::default(),
-            name: Some("joint_indices".to_string()),
+            name: Some("joint_indices".into()),
         });
+
         let indices_accessor = self.root.push(Accessor {
             buffer_view: Some(indices_view),
             byte_offset: Some(USize64(0)),
@@ -193,26 +368,26 @@ impl GltfBuilder {
             sparse: None,
             extensions: None,
             extras: Default::default(),
-            name: Some("JOINTS".to_string()),
+            name: Some("JOINTS_0".into()),
             min: None,
             max: None,
         });
 
-        while self.combined_buffer.len() % 4 != 0 {
-            self.combined_buffer.push(0);
-        }
+        self.align_4();
         let weights_offset = self.combined_buffer.len();
         self.combined_buffer.extend_from_slice(&joint_weights_bytes);
+
         let weights_view = self.root.push(View {
             buffer: self.buffer_index,
             byte_length: USize64::from(joint_weights_bytes.len()),
             byte_offset: Some(USize64::from(weights_offset)),
-            byte_stride: Some(Stride(4 * std::mem::size_of::<f32>())),
+            byte_stride: Some(Stride(16)),
             target: Some(Checked::Valid(Target::ArrayBuffer)),
             extensions: None,
             extras: Default::default(),
-            name: Some("joint_weights".to_string()),
+            name: Some("joint_weights".into()),
         });
+
         let weights_accessor = self.root.push(Accessor {
             buffer_view: Some(weights_view),
             byte_offset: Some(USize64(0)),
@@ -223,13 +398,14 @@ impl GltfBuilder {
             sparse: None,
             extensions: None,
             extras: Default::default(),
-            name: Some("WEIGHTS".to_string()),
+            name: Some("WEIGHTS_0".into()),
             min: None,
             max: None,
         });
 
         (Some(indices_accessor), Some(weights_accessor))
     }
+
     pub fn add_inverse_bind_matrices(&mut self, ibm_matrices: &[[f32; 16]]) -> Index<Accessor> {
         let offset = self.combined_buffer.len();
         for mat in ibm_matrices {
@@ -564,20 +740,13 @@ pub fn build_skinned_mesh_gltf(
     path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
-    let mut bones: BTreeSet<JointName> = BTreeSet::new();
-
-    // 1️⃣ Collect bones (joints with multiple transforms)
-    for (joint_name, joint) in &avatar.global_skeleton.joints {
-        if joint.transforms.len() > 1 {
-            bones.insert(*joint_name);
-        }
-    }
+    let bones: BTreeSet<JointName> = avatar.used_joints.clone();
 
     let mut mesh_nodes = Vec::new();
     let mut skinned_nodes = Vec::new();
 
     // 2️⃣ Add mesh objects
-    for object in avatar.objects {
+    for object in &avatar.objects {
         let json_str = fs::read_to_string(&object)?;
         let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
 
@@ -682,10 +851,8 @@ pub fn build_skinned_mesh_gltf(
         }
     }
 
-    // 6️⃣ Add inverse bind matrices
     let ibm_accessor_index = builder.add_inverse_bind_matrices(&ibm_matrices);
 
-    // 7️⃣ Create skin
     let root_joints: Vec<Index<Node>> = skeleton_nodes
         .iter()
         .filter(|&&node_index| {
@@ -707,23 +874,33 @@ pub fn build_skinned_mesh_gltf(
         name: Some("AvatarSkin".to_string()),
     });
 
-    // 8️⃣ Assign skin to skinned mesh nodes
     for node_index in skinned_nodes.iter() {
         builder.root.nodes[node_index.value()].skin = Some(skin_index);
     }
 
     let skeleton_root_index = builder.root.push(Node {
         name: Some("SkeletonRoot".to_string()),
-        children: Some(root_joints),
+        children: Some(root_joints), // joints go under SkeletonRoot
         ..Default::default()
     });
 
-    let mut scene_children = mesh_nodes.clone();
-    scene_children.push(skeleton_root_index);
+    builder.add_bind_pose_animation(&avatar, &bones, &joint_to_node);
+
+    let non_skinned_mesh_nodes: Vec<Index<Node>> = mesh_nodes
+        .into_iter()
+        .filter(|idx| !skinned_nodes.contains(idx))
+        .collect();
 
     let scene_root_index = builder.root.push(Node {
         name: Some("SceneRoot".to_string()),
-        children: Some(scene_children),
+        children: Some(
+            skinned_nodes
+                .iter()
+                .cloned() // skinned meshes go directly under scene root
+                .chain(non_skinned_mesh_nodes.into_iter())
+                .chain(std::iter::once(skeleton_root_index)) // skeleton root last
+                .collect(),
+        ),
         ..Default::default()
     });
 

@@ -1,15 +1,17 @@
 [package]
 name = "metaverse_mesh"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Skyler Clark<skylerjaneclark@gmail.com>"]
 description = "mesh handling for the open metaverse"
 license = "AGPL-3.0-or-later"
 edition = "2024"
 
 [dependencies]
-glam = "0.30.8"
+glam = "0.30.10"
 gltf = "1.4.1"
 gltf-json = "1.4.1"
-metaverse_messages = {path="../metaverse_client/crates/messages/"}
-rgb = "0.8.52"
-serde_json = "1.0.145"
+benthic_protocol = {path = "../benthic_protocol/"}
+rgb = "0.8.53"
+serde_json = "1.0.149"
+regex = "1.12.3"
+bevy = "0.18.1"
