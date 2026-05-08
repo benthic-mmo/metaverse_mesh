@@ -1,4 +1,4 @@
-use benthic_default_assets::render_data::{AvatarObject, RenderObject};
+use benthic_protocol::render_data::{AvatarObject, RenderObject};
 
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.

@@ -1,5 +1,5 @@
-use benthic_default_assets::render_data::{AvatarObject, JointWeight, RenderObject};
-use benthic_default_assets::skeleton::JointName;
+use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
+use benthic_protocol::skeleton::JointName;
 use glam::{usize, Quat, Vec3};
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
@@ -141,9 +141,7 @@ impl GltfBuilder {
         joint_to_node: &HashMap<JointName, Index<Node>>,
     ) {
         use gltf_json::*;
-
-        // --- Input accessor (time) ---
-        let mut input_bytes = Vec::new(); // time 0
+        let mut input_bytes = Vec::new();
         input_bytes.extend_from_slice(&0.0f32.to_le_bytes());
         self.align_4();
         let input_offset = self.combined_buffer.len();
@@ -742,13 +740,7 @@ pub fn build_skinned_mesh_gltf(
     path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = GltfBuilder::new("Combined Avatar");
-    let mut bones: BTreeSet<JointName> = BTreeSet::new();
-
-    for (joint_name, joint) in &avatar.global_skeleton.joints {
-        if joint.transforms.len() > 1 {
-            bones.insert(*joint_name);
-        }
-    }
+    let bones: BTreeSet<JointName> = avatar.used_joints.clone();
 
     let mut mesh_nodes = Vec::new();
     let mut skinned_nodes = Vec::new();
