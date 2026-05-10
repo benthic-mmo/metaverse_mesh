@@ -11,6 +11,7 @@ glam = "0.30.10"
 gltf = "1.4.1"
 gltf-json = "1.4.1"
 benthic_protocol = {path = "../benthic_protocol/"}
+benthic_asset_pipeline = {path = "../benthic_asset_pipeline/", features=["animations"]}
 rgb = "0.8.53"
 serde_json = "1.0.149"
 regex = "1.12.3"

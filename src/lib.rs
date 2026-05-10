@@ -1,2 +1,2 @@
-pub mod generate;
-pub mod gltf;
+pub mod animation;
+pub mod mesh;
