@@ -2,7 +2,7 @@ use benthic_protocol::render_data::{AvatarObject, RenderObject};
 
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.
-use crate::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
+use crate::mesh::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
 use std::error::Error;
 use std::{
     ffi::{CStr, c_char},
