@@ -1,10 +1,10 @@
 {
   "objects": [
-    "/home/skclark/benthic/metaverse_mesh/tests/generated/json/overalls.json",
-    "/home/skclark/benthic/metaverse_mesh/tests/generated/json/body.json",
-    "/home/skclark/benthic/metaverse_mesh/tests/generated/json/t-shirt.json",
-    "/home/skclark/benthic/metaverse_mesh/tests/generated/json/hair.json",
-    "/home/skclark/benthic/metaverse_mesh/tests/generated/json/body.json"
+    "/home/skclark/benthic/metaverse_mesh/tests/mesh/generated/json/overalls.json",
+    "/home/skclark/benthic/metaverse_mesh/tests/mesh/generated/json/body.json",
+    "/home/skclark/benthic/metaverse_mesh/tests/mesh/generated/json/t-shirt.json",
+    "/home/skclark/benthic/metaverse_mesh/tests/mesh/generated/json/hair.json",
+    "/home/skclark/benthic/metaverse_mesh/tests/mesh/generated/json/body.json"
   ],
   "global_skeleton": {
     "joints": {

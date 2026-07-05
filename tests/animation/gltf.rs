@@ -1,13 +1,13 @@
 use benthic_protocol::default_animations::JointAnimation;
 use benthic_protocol::skeleton::JointName;
-use reskeletonizer::gltf::export_filtered_animation;
-use std::collections::HashSet;
+use metaverse_mesh::animation::gltf::export_filtered_animation;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PUFFBALL_JOINT_FILTER: HashSet<JointName> = HashSet::from([
+    static ref PUFFBALL_JOINT_FILTER: BTreeSet<JointName> = BTreeSet::from([
         JointName::Pelvis,
         JointName::Torso,
         JointName::Tail1,
@@ -103,7 +103,7 @@ fn filter_skeleton() {
 fn build_all_bones_gltf() {
     let animations = load_animation("Stand");
 
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
 
     let out_path = PathBuf::from("target/stand_animation.glb");
 
@@ -113,7 +113,7 @@ fn build_all_bones_gltf() {
 #[test]
 fn build_bow() {
     let animations = load_animation("Bow");
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
 
     let out_path = PathBuf::from("target/bow_animation.glb");
 
@@ -124,7 +124,7 @@ fn build_bow() {
 fn build_only_arm() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.insert(JointName::ShoulderLeft);
     joint_filter.insert(JointName::ElbowLeft);
 
@@ -137,7 +137,7 @@ fn build_only_arm() {
 fn build_only_puffball() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
     let out_path = PathBuf::from("target/puffball.glb");
@@ -149,7 +149,7 @@ fn build_only_puffball() {
 fn build_only_puffball_bvh() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
     let out_path = PathBuf::from("target/puffball_bow.glb");

@@ -3372,6 +3372,7 @@ dependencies = [
  "glam",
  "gltf",
  "gltf-json",
+ "lazy_static",
  "regex",
  "rgb",
  "serde_json",

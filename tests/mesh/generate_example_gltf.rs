@@ -1,4 +1,3 @@
-// skeleton.rs dependencies
 use bevy::prelude::{PluginGroup, Startup};
 use bevy::{
     app::App,
@@ -16,7 +15,7 @@ use bevy::{
     DefaultPlugins,
 };
 use glam::Vec3;
-use metaverse_mesh::generate::{generate_mesh, generate_skinned_mesh};
+use metaverse_mesh::mesh::generate::{generate_mesh, generate_skinned_mesh};
 use regex::Regex;
 use std::{fs, path::PathBuf};
 
@@ -51,32 +50,32 @@ fn replace_textures_regex(original: &PathBuf, out_dir: &PathBuf) -> PathBuf {
 #[test]
 pub fn generate_example() {
     //let base_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/example_json");
-    let out_json_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/generated/json");
+    let out_json_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/mesh/generated/json");
     std::fs::create_dir_all(&out_json_dir).unwrap();
 
     let mut overalls_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    overalls_path.push("tests/example_json/overalls.json");
+    overalls_path.push("tests/mesh/example_json/overalls.json");
     let new_overalls_path = replace_textures_regex(&overalls_path, &out_json_dir);
 
     let mut shirt_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    shirt_path.push("tests/example_json/t-shirt.json");
+    shirt_path.push("tests/mesh/example_json/t-shirt.json");
     replace_textures_regex(&shirt_path, &out_json_dir);
 
     let mut body_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    body_path.push("tests/example_json/body.json");
+    body_path.push("tests/mesh/example_json/body.json");
     let new_body_path = replace_textures_regex(&body_path, &out_json_dir);
 
     let mut curves_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    curves_path.push("tests/example_json/hair.json");
+    curves_path.push("tests/mesh/example_json/hair.json");
     replace_textures_regex(&curves_path, &out_json_dir);
 
     let mut button_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    button_path.push("tests/example_json/button.json");
+    button_path.push("tests/mesh/example_json/button.json");
     replace_textures_regex(&button_path, &out_json_dir);
 
     // this is the full avatar json containing all of the sub-outfit pieces
     let mut avatar_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    avatar_path.push("tests/example_json/avatar.json");
+    avatar_path.push("tests/mesh/example_json/avatar.json");
 
     let replacements = [
         ("OVERALLS", "overalls.json"),
@@ -95,16 +94,16 @@ pub fn generate_example() {
     fs::write(&test_avatar_path, &avatar_json_str).expect("Failed to write avatar_test.json");
 
     let mut out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    out_path.push("tests/generated/Combined.glb");
+    out_path.push("tests/mesh/generated/Combined.glb");
 
     let mut out_path_boneless = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    out_path_boneless.push("tests/generated/Boneless.glb");
+    out_path_boneless.push("tests/mesh/generated/Boneless.glb");
 
     let mut out_path_boneless_body = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    out_path_boneless_body.push("tests/generated/BonelessBody.glb");
+    out_path_boneless_body.push("tests/mesh/generated/BonelessBody.glb");
 
     let mut out_path_button = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    out_path_button.push("tests/generated/Button.glb");
+    out_path_button.push("tests/mesh/generated/Button.glb");
 
     generate_skinned_mesh(test_avatar_path, out_path).unwrap();
     generate_mesh(new_overalls_path, out_path_boneless).unwrap();
@@ -123,14 +122,13 @@ fn display_generated_models() {
                 run_on_any_thread: true,
             })
             .set(AssetPlugin {
-                file_path: "tests/generated".to_string(),
+                file_path: "tests/mesh/generated".to_string(),
                 mode: AssetMode::Unprocessed,
                 ..Default::default()
             }),
     );
 
     app.add_systems(Startup, setup);
-
     app.run();
 }
 

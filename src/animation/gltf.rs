@@ -6,13 +6,12 @@ use benthic_protocol::{
 use glam::{Mat4, Quat, Vec3};
 use gltf::{accessor::DataType, animation::Interpolation, binary::Glb};
 use gltf_json::{
-    self,
+    self, Accessor, Index, Node, Value,
     accessor::GenericComponentType,
     animation::{Channel, Target},
     buffer::View,
     scene::UnitQuaternion,
     validation::{Checked, USize64},
-    Accessor, Index, Node, Value,
 };
 use std::{
     borrow::Cow,
@@ -552,10 +551,5 @@ pub fn export_filtered_animation(
     builder.add_filtered_animation(&skeleton, animations, joint_filter);
     builder.add_skin_from_skeleton(&skeleton, joint_filter);
     builder.finalize_scene("filtered_scene");
-
-    println!(
-        "GENERATING FILTERED ANIMATION!!!!!!!!!!!!!!!!!!!{:?}",
-        out_path
-    );
     builder.finalize(&out_path)
 }

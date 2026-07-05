@@ -15,4 +15,7 @@ benthic_asset_pipeline = {path = "../benthic_asset_pipeline/", features=["animat
 rgb = "0.8.53"
 serde_json = "1.0.149"
 regex = "1.12.3"
+
+[dev-dependencies]
 bevy = "0.18.1"
+lazy_static = "1.5.0"

@@ -19,15 +19,15 @@ use bevy::{
     transform::components::Transform,
     DefaultPlugins,
 };
-use reskeletonizer::gltf::export_filtered_animation;
+use lazy_static::lazy_static;
+use metaverse_mesh::animation::gltf::export_filtered_animation;
 use std::fs::File;
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 lazy_static! {
-    static ref PUFFBALL_JOINT_FILTER: HashSet<JointName> = HashSet::from([
+    static ref PUFFBALL_JOINT_FILTER: BTreeSet<JointName> = BTreeSet::from([
         JointName::Pelvis,
         JointName::Torso,
         JointName::Tail1,
@@ -107,7 +107,7 @@ fn display_animation() {
     let animations: Vec<JointAnimation> =
         serde_json::from_reader(file).expect("failed to deserialize animation json");
 
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
     let out_path = PathBuf::from("tests/assets/animations/stand_animation.glb");
     export_filtered_animation(&animations, &joint_filter, out_path.clone()).unwrap();
 
