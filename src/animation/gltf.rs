@@ -1,25 +1,24 @@
-use benthic_asset_pipeline::generated::DEFAULT_SKELETON;
 use benthic_protocol::{
-    default_animations::JointAnimation,
+    default_animations::AnimationClip,
     skeleton::{JointName, Skeleton},
 };
-use glam::{Mat4, Quat, Vec3};
 use gltf::{accessor::DataType, animation::Interpolation, binary::Glb};
 use gltf_json::{
-    self,
+    self, Accessor, Index, Node, Value,
     accessor::GenericComponentType,
     animation::{Channel, Target},
     buffer::View,
     scene::UnitQuaternion,
     validation::{Checked, USize64},
-    Accessor, Index, Node, Value,
 };
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fs::File,
     path::PathBuf,
 };
+
+use crate::errors::MetaverseMeshError;
 
 pub struct GltfBuilder {
     pub root: gltf_json::Root,
@@ -45,40 +44,45 @@ impl GltfBuilder {
             joint_to_node: HashMap::new(),
         }
     }
+
     pub fn add_skin_from_skeleton(
         &mut self,
-        skeleton: &Skeleton,
-        joint_filter: &BTreeSet<JointName>,
-    ) {
+        bind_skeleton: &Skeleton,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut joint_nodes = Vec::new();
         let mut ibm_matrices = Vec::new();
 
-        for joint_name in joint_filter {
-            let joint = &skeleton.joints[joint_name];
+        for (joint_name, _) in bind_skeleton.joints.iter() {
+            let global = bind_skeleton.joints[joint_name]
+                .global_transforms
+                .last()
+                .unwrap()
+                .transform;
+
             let node_index = self.joint_to_node[joint_name];
 
             joint_nodes.push(node_index);
-
-            ibm_matrices.push(joint.transforms.last().unwrap().transform.to_cols_array());
+            ibm_matrices.push(global.inverse().to_cols_array());
         }
 
         let ibm_accessor = self.push_mat4_accessor_flat(&ibm_matrices, "ibm");
+        let root_joint = bind_skeleton
+            .joints
+            .values()
+            .find(|joint| joint.parent.is_none())
+            .map(|joint| self.joint_to_node[&joint.name]);
 
-        let root_joint = joint_filter
-            .iter()
-            .find(|jn| skeleton.joints[*jn].parent.is_none())
-            .map(|jn| self.joint_to_node[jn]);
-
-        let _skin_index = self.root.push(gltf_json::Skin {
-            joints: joint_nodes.clone(),
+        self.root.push(gltf_json::Skin {
+            joints: joint_nodes,
             inverse_bind_matrices: Some(ibm_accessor),
-            skeleton: root_joint, // the skeleton root node
+            skeleton: root_joint,
             name: Some("SkeletonRoot".to_string()),
             extensions: Default::default(),
             extras: Default::default(),
         });
-    }
 
+        Ok(())
+    }
     fn push_mat4_accessor_flat(&mut self, values: &[[f32; 16]], name: &str) -> Index<Accessor> {
         self.align_4();
         let offset = self.combined_buffer.len();
@@ -117,7 +121,7 @@ impl GltfBuilder {
     }
 
     fn align_4(&mut self) {
-        while self.combined_buffer.len() % 4 != 0 {
+        while !self.combined_buffer.len().is_multiple_of(4) {
             self.combined_buffer.push(0);
         }
     }
@@ -274,22 +278,16 @@ impl GltfBuilder {
         })
     }
 
-    pub fn add_filtered_animation(
-        &mut self,
-        skeleton: &Skeleton,
-        animations: &[JointAnimation],
-        joint_filter: &BTreeSet<JointName>,
-    ) {
-        // First push all nodes
-        for (joint_name, joint) in skeleton.joints.iter() {
-            if !joint_filter.contains(joint_name) {
-                continue;
-            }
-            let t = joint.transforms[0].transform.to_cols_array();
-            let mat = Mat4::from_cols_array(&t);
-            let translation = mat.w_axis.truncate();
-            let rotation = Quat::from_mat4(&mat).normalize();
-            let scale = Vec3::new(1.0, 1.0, 1.0);
+    pub fn add_animation(&mut self, animation_clip: &AnimationClip) {
+        let animations = animation_clip.joints.clone();
+        let bind_skeleton = animation_clip.bind_skeleton.clone();
+
+        for (joint_name, joint) in bind_skeleton.joints.iter() {
+            let transform = &joint.local_transforms.last().unwrap();
+
+            let (_, rotation, translation) = transform.transform.to_scale_rotation_translation();
+
+            let scale = transform.transform.to_scale_rotation_translation().0;
 
             let node_index = self.root.push(Node {
                 name: Some(joint_name.to_string()),
@@ -304,76 +302,66 @@ impl GltfBuilder {
             self.joint_to_node.insert(*joint_name, node_index);
         }
 
-        for (joint_name, joint) in skeleton.joints.iter() {
-            if !joint_filter.contains(joint_name) {
+        for (joint_name, joint) in bind_skeleton.joints.iter() {
+            let Some(parent_name) = joint.parent else {
                 continue;
-            }
-            let parent_node = self.joint_to_node[joint_name];
-            let children_indices: Vec<_> = joint
+            };
+
+            let parent_node = self.joint_to_node[&parent_name];
+            let child_node = self.joint_to_node[joint_name];
+
+            self.root.nodes[parent_node.value()]
                 .children
-                .iter()
-                .filter(|c| joint_filter.contains(c))
-                .map(|c| self.joint_to_node[c])
-                .collect();
-            if !children_indices.is_empty() {
-                self.root.nodes[parent_node.value() as usize].children = Some(children_indices);
-            }
+                .get_or_insert_with(Vec::new)
+                .push(child_node);
         }
 
         let mut samplers = Vec::new();
         let mut channels = Vec::new();
 
-        for joint_anim in animations
-            .iter()
-            .filter(|a| joint_filter.contains(&a.joint))
-        {
+        for joint_anim in animations {
             let node_index = self.joint_to_node[&joint_anim.joint];
 
             if !joint_anim.translations.is_empty() {
-                if !joint_anim.translations.is_empty() {
-                    let times: Vec<f32> = joint_anim.translations.iter().map(|k| k.time).collect();
+                let times: Vec<f32> = joint_anim.translations.iter().map(|k| k.time).collect();
 
-                    let values: Vec<[f32; 3]> = joint_anim
-                        .translations
-                        .iter()
-                        .map(|k| {
-                            let v = k.value;
-                            [v.x, v.y, v.z]
-                        })
-                        .collect();
+                let values: Vec<[f32; 3]> = joint_anim
+                    .translations
+                    .iter()
+                    .map(|k| [k.value.x, k.value.y, k.value.z])
+                    .collect();
 
-                    let input_accessor = self.push_scalar_accessor(
-                        &times,
-                        &format!("{:?}_translation_times", joint_anim.joint),
-                    );
+                let input_accessor = self.push_scalar_accessor(
+                    &times,
+                    &format!("{:?}_translation_times", joint_anim.joint),
+                );
 
-                    let output_accessor = self.push_vec3_accessor(
-                        &values,
-                        &format!("{:?}_translation_values", joint_anim.joint),
-                    );
+                let output_accessor = self.push_vec3_accessor(
+                    &values,
+                    &format!("{:?}_translation_values", joint_anim.joint),
+                );
 
-                    let sampler_index = samplers.len() as u32;
+                let sampler_index = samplers.len() as u32;
 
-                    samplers.push(gltf_json::animation::Sampler {
-                        input: input_accessor,
-                        output: output_accessor,
-                        interpolation: Checked::Valid(Interpolation::Linear),
+                samplers.push(gltf_json::animation::Sampler {
+                    input: input_accessor,
+                    output: output_accessor,
+                    interpolation: Checked::Valid(Interpolation::Linear),
+                    extras: Default::default(),
+                    extensions: None,
+                });
+
+                channels.push(Channel {
+                    sampler: Index::new(sampler_index),
+                    target: Target {
+                        node: node_index,
+                        path: Checked::Valid(gltf::animation::Property::Translation),
                         extras: Default::default(),
                         extensions: None,
-                    });
-
-                    channels.push(Channel {
-                        sampler: Index::new(sampler_index),
-                        target: Target {
-                            node: node_index,
-                            path: Checked::Valid(gltf::animation::Property::Translation),
-                            extras: Default::default(),
-                            extensions: None,
-                        },
-                        extras: Default::default(),
-                        extensions: None,
-                    });
-                }
+                    },
+                    extras: Default::default(),
+                    extensions: None,
+                });
             }
 
             if !joint_anim.rotations.is_empty() {
@@ -382,10 +370,7 @@ impl GltfBuilder {
                 let values: Vec<[f32; 4]> = joint_anim
                     .rotations
                     .iter()
-                    .map(|k| {
-                        let q = k.value;
-                        [q.x, q.y, q.z, q.w]
-                    })
+                    .map(|k| [k.value.x, k.value.y, k.value.z, k.value.w])
                     .collect();
 
                 let input_accessor = self.push_scalar_accessor(
@@ -427,10 +412,7 @@ impl GltfBuilder {
                 let values: Vec<[f32; 3]> = joint_anim
                     .scales
                     .iter()
-                    .map(|k| {
-                        let v = k.value;
-                        [v.x, v.y, v.z]
-                    })
+                    .map(|k| [k.value.x, k.value.y, k.value.z])
                     .collect();
 
                 let input_accessor = self
@@ -467,7 +449,7 @@ impl GltfBuilder {
             self.root.animations.push(gltf_json::Animation {
                 samplers,
                 channels,
-                name: Some("filtered_animation".to_string()),
+                name: Some("animation".to_string()),
                 extras: Default::default(),
                 extensions: None,
             });
@@ -524,8 +506,8 @@ impl GltfBuilder {
         });
     }
 
-    pub fn finalize(&mut self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        self.root.buffers[self.buffer_index.value() as usize].byte_length =
+    pub fn finalize(&mut self, path: &PathBuf) -> Result<(), MetaverseMeshError> {
+        self.root.buffers[self.buffer_index.value()].byte_length =
             USize64::from(self.combined_buffer.len());
         let json_bytes = gltf_json::serialize::to_string(&self.root)?.into_bytes();
         let glb = Glb {
@@ -542,20 +524,13 @@ impl GltfBuilder {
     }
 }
 
-pub fn export_filtered_animation(
-    animations: &[JointAnimation],
-    joint_filter: &BTreeSet<JointName>,
-    out_path: PathBuf,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let skeleton: Skeleton = DEFAULT_SKELETON.clone();
+pub fn export_animation(
+    animations: &AnimationClip,
+    out_path: &PathBuf,
+) -> Result<(), MetaverseMeshError> {
     let mut builder = GltfBuilder::new("animation");
-    builder.add_filtered_animation(&skeleton, animations, joint_filter);
-    builder.add_skin_from_skeleton(&skeleton, joint_filter);
-    builder.finalize_scene("filtered_scene");
-
-    println!(
-        "GENERATING FILTERED ANIMATION!!!!!!!!!!!!!!!!!!!{:?}",
-        out_path
-    );
-    builder.finalize(&out_path)
+    builder.add_animation(animations);
+    builder.add_skin_from_skeleton(&animations.bind_skeleton)?;
+    builder.finalize_scene("benthic_animation");
+    builder.finalize(out_path)
 }

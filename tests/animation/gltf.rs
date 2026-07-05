@@ -1,13 +1,13 @@
-use benthic_protocol::default_animations::JointAnimation;
-use benthic_protocol::skeleton::JointName;
-use reskeletonizer::gltf::export_filtered_animation;
-use std::collections::HashSet;
+use benthic_protocol::default_animations::AnimationClip;
+use benthic_protocol::skeleton::{JointName, Skeleton};
+use metaverse_mesh::animation::gltf::{export_animation_clip, export_filtered_animation};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PUFFBALL_JOINT_FILTER: HashSet<JointName> = HashSet::from([
+    static ref PUFFBALL_JOINT_FILTER: BTreeSet<JointName> = BTreeSet::from([
         JointName::Pelvis,
         JointName::Torso,
         JointName::Tail1,
@@ -76,12 +76,11 @@ lazy_static! {
         JointName::FootRight,
     ]);
 }
-
-fn load_animation(name: &str) -> Vec<JointAnimation> {
+fn load_animation(name: &str) -> AnimationClip {
     let path = benthic_asset_pipeline::generated_asset_path();
 
     let file = std::fs::File::open(
-        std::path::PathBuf::from(path)
+        PathBuf::from(path)
             .join("Animations")
             .join(format!("{name}.json")),
     )
@@ -90,12 +89,24 @@ fn load_animation(name: &str) -> Vec<JointAnimation> {
     serde_json::from_reader(file).expect("failed to deserialize animation json")
 }
 
+fn generated_animation_path(name: &str) -> PathBuf {
+    let path = PathBuf::from("tests").join("animation").join("generated");
+
+    std::fs::create_dir_all(&path).unwrap();
+
+    path.join(name)
+}
+
 #[test]
 fn filter_skeleton() {
     let animations = load_animation("Stand");
 
-    if let Some(j) = animations.iter().find(|a| a.joint == JointName::Pelvis) {
-        println!("{:?}", j);
+    if let Some(_j) = animations
+        .joints
+        .iter()
+        .find(|a| a.joint == JointName::Pelvis)
+    {
+        //println!("{:?}", j);
     }
 }
 
@@ -103,9 +114,9 @@ fn filter_skeleton() {
 fn build_all_bones_gltf() {
     let animations = load_animation("Stand");
 
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.joints.iter().map(|j| j.joint).collect();
 
-    let out_path = PathBuf::from("target/stand_animation.glb");
+    let out_path = generated_animation_path("stand_animation.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -113,9 +124,10 @@ fn build_all_bones_gltf() {
 #[test]
 fn build_bow() {
     let animations = load_animation("Bow");
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
 
-    let out_path = PathBuf::from("target/bow_animation.glb");
+    let joint_filter: BTreeSet<_> = animations.joints.iter().map(|j| j.joint).collect();
+
+    let out_path = generated_animation_path("bow_animation.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -124,11 +136,11 @@ fn build_bow() {
 fn build_only_arm() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.insert(JointName::ShoulderLeft);
     joint_filter.insert(JointName::ElbowLeft);
 
-    let out_path = PathBuf::from("target/arm.glb");
+    let out_path = generated_animation_path("arm.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -137,10 +149,10 @@ fn build_only_arm() {
 fn build_only_puffball() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
-    let out_path = PathBuf::from("target/puffball.glb");
+    let out_path = generated_animation_path("puffball.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -149,10 +161,29 @@ fn build_only_puffball() {
 fn build_only_puffball_bvh() {
     let animations = load_animation("Stand");
 
-    let mut joint_filter = HashSet::new();
+    let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
-    let out_path = PathBuf::from("target/puffball_bow.glb");
+    let out_path = generated_animation_path("puffball_bow.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
+}
+
+#[test]
+fn build_rotated_gltf() {
+    let path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Stand.json";
+    let skele_path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/default_skeleton.json";
+
+    let file = std::fs::File::open(PathBuf::from(path)).unwrap();
+    let skele_file = std::fs::File::open(PathBuf::from(skele_path)).unwrap();
+
+    let clip: AnimationClip =
+        serde_json::from_reader(file).expect("failed to deserialize animation json");
+
+    let skeleton: Skeleton =
+        serde_json::from_reader(skele_file).expect("failed to deserialize skeleton json");
+
+    let out_path = generated_animation_path("Walk_rotated.glb");
+
+    export_animation_clip(&clip, out_path, skeleton).unwrap();
 }

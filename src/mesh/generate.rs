@@ -1,5 +1,6 @@
 use benthic_protocol::render_data::{AvatarObject, RenderObject};
 
+use crate::errors::MetaverseMeshError;
 // This file is for generating a mesh that includes a Skeleton object, along with SceneObject
 // jsons.
 use crate::mesh::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
@@ -12,17 +13,17 @@ use std::{
 pub fn generate_skinned_mesh(
     agent_object: PathBuf,
     out_path: PathBuf,
-) -> Result<(), Box<dyn Error>> {
-    let json_str =
-        fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
+) -> Result<(), MetaverseMeshError> {
+    let json_str = fs::read_to_string(&agent_object)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", agent_object));
     let avatar: AvatarObject = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
     build_skinned_mesh_gltf(avatar, out_path)
 }
 
 pub fn generate_mesh(agent_object: PathBuf, out_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let json_str =
-        fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
+    let json_str = fs::read_to_string(&agent_object)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", agent_object));
     let avatar: Vec<RenderObject> = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
     build_mesh_scene_gltf(avatar, out_path)?;
@@ -32,9 +33,9 @@ pub fn generate_mesh(agent_object: PathBuf, out_path: PathBuf) -> Result<(), Box
 pub fn generate_object_mesh(
     agent_object: PathBuf,
     out_path: PathBuf,
-) -> Result<(), Box<dyn Error>> {
-    let json_str =
-        fs::read_to_string(&agent_object).expect(&format!("Failed to read {:?}", agent_object));
+) -> Result<(), MetaverseMeshError> {
+    let json_str = fs::read_to_string(&agent_object)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", agent_object));
     let object: RenderObject = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
     build_mesh_scene_gltf(vec![object], out_path)?;

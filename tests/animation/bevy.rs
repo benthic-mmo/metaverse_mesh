@@ -1,4 +1,4 @@
-use benthic_protocol::default_animations::JointAnimation;
+use benthic_protocol::default_animations::AnimationClip;
 use benthic_protocol::skeleton::JointName;
 use bevy::asset::{AssetMode, AssetPlugin};
 use bevy::ecs::prelude::*;
@@ -7,27 +7,29 @@ use bevy::light::GlobalAmbientLight;
 use bevy::prelude::Name;
 use bevy::winit::WinitPlugin;
 use bevy::{
+    DefaultPlugins,
     animation::AnimationPlayer,
     app::{App, PluginGroup, Startup},
     asset::{AssetServer, Assets, Handle},
     color::Color,
     ecs::system::{Commands, Query, Res, ResMut},
     gltf::GltfAssetLabel,
-    math::Vec3,
+    math::{Dir3, Vec3}, // Added Dir3 import
     prelude::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex, Camera3d, Resource},
-    scene::SceneRoot,
     transform::components::Transform,
-    DefaultPlugins,
 };
-use reskeletonizer::gltf::export_filtered_animation;
-use std::fs::File;
+use bevy_panorbit_camera::PanOrbitCamera;
+use bevy_world_serialization::WorldAssetRoot; // Added WorldAssetRoot import
+use lazy_static::lazy_static;
+use metaverse_mesh::animation::gltf::export_filtered_animation;
+use metaverse_mesh::mesh::generate::generate_skinned_mesh;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
-use std::collections::HashSet;
+use crate::generate_example;
 
 lazy_static! {
-    static ref PUFFBALL_JOINT_FILTER: HashSet<JointName> = HashSet::from([
+    static ref PUFFBALL_JOINT_FILTER: BTreeSet<JointName> = BTreeSet::from([
         JointName::Pelvis,
         JointName::Torso,
         JointName::Tail1,
@@ -96,20 +98,63 @@ lazy_static! {
         JointName::FootRight,
     ]);
 }
+fn generated_animation_path(name: &str) -> PathBuf {
+    let path = PathBuf::from("tests").join("animation").join("generated");
+
+    std::fs::create_dir_all(&path).unwrap();
+
+    path.join(name)
+}
+
+fn load_animation(name: &str) -> AnimationClip {
+    let path = benthic_asset_pipeline::generated_asset_path();
+    let filename = path.join("Animations").join(format!("{name}.json"));
+
+    println!("loading animation: {:?}", filename);
+    let file = std::fs::File::open(filename).unwrap();
+
+    serde_json::from_reader(file).expect("failed to deserialize animation json")
+}
 
 #[test]
-fn display_animation() {
+fn run_stand_only() {
+    display_animation("Stand");
+}
+
+#[test]
+fn run_stand_correct() {
+    display_animation("Stand_Correct");
+}
+
+#[test]
+fn run_standy() {
+    display_animation("standy");
+}
+
+fn display_animation(animation: &str) {
     let mut app = App::new();
-    let out_dir = benthic_asset_pipeline::generated_asset_path();
-    let path = PathBuf::from(out_dir).join("Animations").join("Stand.json");
 
-    let file = File::open(path).expect("failed to open animation json");
-    let animations: Vec<JointAnimation> =
-        serde_json::from_reader(file).expect("failed to deserialize animation json");
+    let animations = load_animation(animation);
 
-    let joint_filter: HashSet<_> = animations.iter().map(|j| j.joint).collect();
-    let out_path = PathBuf::from("tests/assets/animations/stand_animation.glb");
+    let mut joint_filter = BTreeSet::new();
+    joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
+
+    let out_path = generated_animation_path("puffball.glb");
+
     export_filtered_animation(&animations, &joint_filter, out_path.clone()).unwrap();
+
+    let generated_paths = generate_example();
+    let mut mesh_out_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    mesh_out_path.push("tests/generated/animation_combined.glb");
+
+    generate_skinned_mesh(generated_paths.avatar.clone(), mesh_out_path.clone()).unwrap_or_else(
+        |e| {
+            panic!(
+                "generate_skinned_mesh failed\n  input: {:?}\n  output: {:?}\n  error: {e:?}",
+                generated_paths.avatar, out_path
+            )
+        },
+    );
 
     // Configure WinitPlugin to run on any thread
     app.add_plugins((DefaultPlugins
@@ -117,11 +162,12 @@ fn display_animation() {
             run_on_any_thread: true,
         })
         .set(AssetPlugin {
-            file_path: "tests/assets".to_string(),
+            file_path: "tests".to_string(),
             mode: AssetMode::Unprocessed,
             ..Default::default()
         })
         .set(ImagePlugin::default_nearest()),));
+    app.add_plugins(bevy_panorbit_camera::PanOrbitCameraPlugin);
     app.finish();
     app.cleanup();
     // Resources
@@ -151,7 +197,14 @@ struct AnimationGraphCache {
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0., 0.5, 5.).looking_at(Vec3::new(0., 0.5, 0.), Vec3::Y),
+        Transform::from_xyz(1.5, 1.5, 3.5).looking_at(Vec3::new(0.0, 0.0, 0.0), Dir3::Y),
+        PanOrbitCamera {
+            focus: Vec3::new(0.0, 0.0, 0.0),
+            orbit_smoothness: 0.1,
+            pan_smoothness: 0.1,
+            zoom_smoothness: 0.1,
+            ..Default::default()
+        },
     ));
 }
 
@@ -161,12 +214,14 @@ fn setup_animation_graph(
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     let mut graph = AnimationGraph::new();
-    let animations = vec![graph.add_clip(
-        asset_server
-            .load(GltfAssetLabel::Animation(0).from_asset("animations/stand_animation.glb")),
-        1.0,
-        graph.root,
-    )];
+    let animations = vec![
+        graph.add_clip(
+            asset_server
+                .load(GltfAssetLabel::Animation(0).from_asset("animation/generated/puffball.glb")),
+            1.0,
+            graph.root,
+        ),
+    ];
 
     let graph_handle = graphs.add(graph);
     commands.insert_resource(AnimationGraphCache {
@@ -177,8 +232,11 @@ fn setup_animation_graph(
 
 fn spawn_models(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("prod_model.glb"))),
-        Transform::from_xyz(0., 0., 0.),
+        WorldAssetRoot(
+            asset_server
+                .load(GltfAssetLabel::Scene(0).from_asset("generated/animation_combined.glb")),
+        ),
+        Transform::from_xyz(0., -1.0, 0.),
         Name::new("Puffball"),
     ));
 }
