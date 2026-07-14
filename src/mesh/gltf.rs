@@ -1,9 +1,8 @@
 use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
 use benthic_protocol::skeleton::JointName;
-use glam::{Quat, Vec3, usize};
+use glam::{usize, Quat, Vec3};
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
-    Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
     image::MimeType,
@@ -15,6 +14,7 @@ use gltf_json::{
         Checked::{self, Valid},
         USize64,
     },
+    Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
 };
 use rgb::bytemuck;
 use std::{

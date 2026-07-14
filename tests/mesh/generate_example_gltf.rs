@@ -1,4 +1,4 @@
-use bevy::prelude::{PluginGroup, Startup};
+use bevy::prelude::{Dir3, PluginGroup, Startup, Vec3};
 use bevy::{
     app::App,
     asset::{AssetMode, AssetPlugin, AssetServer},
@@ -9,12 +9,11 @@ use bevy::{
     },
     gltf::GltfAssetLabel,
     light::DirectionalLight,
-    scene::SceneRoot,
     transform::components::Transform,
     winit::WinitPlugin,
     DefaultPlugins,
 };
-use glam::Vec3;
+use bevy_world_serialization::WorldAssetRoot;
 use metaverse_mesh::mesh::generate::{generate_mesh, generate_skinned_mesh};
 use regex::Regex;
 use std::{fs, path::PathBuf};
@@ -69,9 +68,9 @@ pub fn generate_example() {
     curves_path.push("tests/mesh/example_json/hair.json");
     replace_textures_regex(&curves_path, &out_json_dir);
 
-    let mut button_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    button_path.push("tests/mesh/example_json/button.json");
-    replace_textures_regex(&button_path, &out_json_dir);
+    //let mut button_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    //button_path.push("tests/mesh/example_json/button.json");
+    //replace_textures_regex(&button_path, &out_json_dir);
 
     // this is the full avatar json containing all of the sub-outfit pieces
     let mut avatar_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -102,8 +101,8 @@ pub fn generate_example() {
     let mut out_path_boneless_body = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     out_path_boneless_body.push("tests/mesh/generated/BonelessBody.glb");
 
-    let mut out_path_button = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    out_path_button.push("tests/mesh/generated/Button.glb");
+    //let mut out_path_button = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    //out_path_button.push("tests/mesh/generated/Button.glb");
 
     generate_skinned_mesh(test_avatar_path, out_path).unwrap();
     generate_mesh(new_overalls_path, out_path_boneless).unwrap();
@@ -136,30 +135,30 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 1.0, 5.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 1.0, 5.0).looking_at(Vec3::new(0.0, 1.0, 0.0), Dir3::Y),
     ));
 
     // Light
     commands.spawn((
         DirectionalLight::default(),
-        Transform::from_xyz(3.0, 5.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(3.0, 5.0, 3.0).looking_at(Vec3::ZERO, Dir3::Y),
     ));
 
     // Load your generated GLBs
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Combined.glb"))),
+        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Combined.glb"))),
         Transform::from_xyz(0.0, 0.0, 0.0),
         Name::new("Combined"),
     ));
 
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Boneless.glb"))),
+        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Boneless.glb"))),
         Transform::from_xyz(-2.0, 0.0, 0.0),
         Name::new("Boneless"),
     ));
 
     commands.spawn((
-        SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("BonelessBody.glb"))),
+        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("BonelessBody.glb"))),
         Transform::from_xyz(2.0, 0.0, 0.0),
         Name::new("BonelessBody"),
     ));

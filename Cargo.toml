@@ -7,15 +7,17 @@ license = "AGPL-3.0-or-later"
 edition = "2024"
 
 [dependencies]
-glam = "0.30.10"
+glam = "0.33.2"
 gltf = "1.4.1"
 gltf-json = "1.4.1"
 benthic_protocol = {path = "../benthic_protocol/"}
 benthic_asset_pipeline = {path = "../benthic_asset_pipeline/", features=["animations"]}
 rgb = "0.8.53"
-serde_json = "1.0.149"
-regex = "1.12.3"
+serde_json = "1.0.150"
+regex = "1.12.4"
 
 [dev-dependencies]
-bevy = "0.18.1"
+bevy = "0.19.0"
 lazy_static = "1.5.0"
+bevy_world_serialization = "0.19.0"
+bevy_panorbit_camera = "0.35.0"

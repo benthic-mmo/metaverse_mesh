@@ -1,2 +1,4 @@
 /target
-/tests/generated
+/tests/mesh/generated/
+/tests/mesh/generated 
+/tests/animation/generated

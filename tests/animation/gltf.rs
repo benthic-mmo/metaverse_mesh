@@ -76,12 +76,11 @@ lazy_static! {
         JointName::FootRight,
     ]);
 }
-
 fn load_animation(name: &str) -> Vec<JointAnimation> {
     let path = benthic_asset_pipeline::generated_asset_path();
 
     let file = std::fs::File::open(
-        std::path::PathBuf::from(path)
+        PathBuf::from(path)
             .join("Animations")
             .join(format!("{name}.json")),
     )
@@ -90,12 +89,20 @@ fn load_animation(name: &str) -> Vec<JointAnimation> {
     serde_json::from_reader(file).expect("failed to deserialize animation json")
 }
 
+fn generated_animation_path(name: &str) -> PathBuf {
+    let path = PathBuf::from("tests").join("animation").join("generated");
+
+    std::fs::create_dir_all(&path).unwrap();
+
+    path.join(name)
+}
+
 #[test]
 fn filter_skeleton() {
     let animations = load_animation("Stand");
 
-    if let Some(j) = animations.iter().find(|a| a.joint == JointName::Pelvis) {
-        println!("{:?}", j);
+    if let Some(_j) = animations.iter().find(|a| a.joint == JointName::Pelvis) {
+        //println!("{:?}", j);
     }
 }
 
@@ -105,7 +112,7 @@ fn build_all_bones_gltf() {
 
     let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
 
-    let out_path = PathBuf::from("target/stand_animation.glb");
+    let out_path = generated_animation_path("stand_animation.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -113,9 +120,10 @@ fn build_all_bones_gltf() {
 #[test]
 fn build_bow() {
     let animations = load_animation("Bow");
+
     let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
 
-    let out_path = PathBuf::from("target/bow_animation.glb");
+    let out_path = generated_animation_path("bow_animation.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -128,7 +136,7 @@ fn build_only_arm() {
     joint_filter.insert(JointName::ShoulderLeft);
     joint_filter.insert(JointName::ElbowLeft);
 
-    let out_path = PathBuf::from("target/arm.glb");
+    let out_path = generated_animation_path("arm.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -140,7 +148,7 @@ fn build_only_puffball() {
     let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
-    let out_path = PathBuf::from("target/puffball.glb");
+    let out_path = generated_animation_path("puffball.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
@@ -152,7 +160,7 @@ fn build_only_puffball_bvh() {
     let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
-    let out_path = PathBuf::from("target/puffball_bow.glb");
+    let out_path = generated_animation_path("puffball_bow.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
 }
