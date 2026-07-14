@@ -8,7 +8,7 @@ use bevy::prelude::Name;
 use bevy::winit::WinitPlugin;
 use bevy::{
     animation::AnimationPlayer,
-    app::{App, PluginGroup, Startup},
+    app::{App, PluginGroup, Startup, Update},
     asset::{AssetServer, Assets, Handle},
     color::Color,
     ecs::system::{Commands, Query, Res, ResMut},
@@ -98,6 +98,10 @@ lazy_static! {
         JointName::FootRight,
     ]);
 }
+
+#[derive(Component)]
+struct PuffballInstance(u8);
+
 fn generated_animation_path(name: &str) -> PathBuf {
     let path = PathBuf::from("tests").join("animation").join("generated");
 
@@ -203,13 +207,16 @@ fn display_animation() {
     let mut app = App::new();
 
     let animations = load_animation("Stand");
+    let stand_test = load_animation("Stand_test");
 
     let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
 
     let out_path = generated_animation_path("puffball.glb");
+    let out_path_2 = generated_animation_path("puffball2.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
+    export_filtered_animation(&stand_test, &joint_filter, out_path_2).unwrap();
     generate_example();
 
     // Configure WinitPlugin to run on any thread
@@ -239,7 +246,8 @@ fn display_animation() {
         .add_systems(Startup, setup_animation_graph);
 
     // Observers
-    app.add_observer(animation_player_added);
+    app.add_systems(Update, animation_player_added);
+    (animation_player_added);
 
     app.run();
 }
@@ -270,40 +278,88 @@ fn setup_animation_graph(
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     let mut graph = AnimationGraph::new();
-    let animations = vec![graph.add_clip(
+
+    let puffball = graph.add_clip(
         asset_server
             .load(GltfAssetLabel::Animation(0).from_asset("animation/generated/puffball.glb")),
         1.0,
         graph.root,
-    )];
+    );
+
+    let puffball2 = graph.add_clip(
+        asset_server
+            .load(GltfAssetLabel::Animation(0).from_asset("animation/generated/puffball2.glb")),
+        1.0,
+        graph.root,
+    );
+
+    println!("puffball node {:?}", puffball);
+    println!("puffball2 node {:?}", puffball2);
 
     let graph_handle = graphs.add(graph);
+
     commands.insert_resource(AnimationGraphCache {
-        animations,
+        animations: vec![puffball, puffball2],
         graph: graph_handle,
     });
 }
 
 fn spawn_models(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let scene =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("mesh/generated/combined.glb"));
+
     commands.spawn((
-        WorldAssetRoot(
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset("mesh/generated/combined.glb")),
-        ),
-        Transform::from_xyz(0., 0., 0.),
-        Name::new("Puffball"),
+        WorldAssetRoot(scene.clone()),
+        Transform::from_xyz(-1.0, 0.0, 0.0),
+        Name::new("Puffball 1"),
+        PuffballInstance(0),
+    ));
+
+    commands.spawn((
+        WorldAssetRoot(scene),
+        Transform::from_xyz(1.0, 0.0, 0.0),
+        Name::new("Puffball 2"),
+        PuffballInstance(1),
     ));
 }
 
 fn animation_player_added(
-    trigger: On<Add, AnimationPlayer>,
     mut commands: Commands,
-    graph_cache: Res<AnimationGraphCache>,
-    mut players: Query<&mut AnimationPlayer>,
+    animation_cache: Res<AnimationGraphCache>,
+    mut players: Query<(Entity, &mut AnimationPlayer, &ChildOf), Added<AnimationPlayer>>,
+    roots: Query<&PuffballInstance>,
+    parents: Query<&ChildOf>,
 ) {
-    if let Ok(mut player) = players.get_mut(trigger.entity) {
-        player.play(graph_cache.animations[0]).repeat();
+    for (entity, mut player, child_of) in &mut players {
+        let mut current = child_of.parent();
+
+        let mut instance = None;
+
+        loop {
+            if let Ok(marker) = roots.get(current) {
+                instance = Some(marker.0);
+                break;
+            }
+
+            match parents.get(current) {
+                Ok(parent) => current = parent.parent(),
+                Err(_) => break,
+            }
+        }
+
+        let index = match instance {
+            Some(0) => 0,
+            Some(1) => 1,
+            _ => {
+                println!("AnimationPlayer did not belong to a Puffball instance");
+                continue;
+            }
+        };
+
+        player.play(animation_cache.animations[index]).repeat();
+
         commands
-            .entity(trigger.entity)
-            .insert(AnimationGraphHandle(graph_cache.graph.clone()));
+            .entity(entity)
+            .insert(AnimationGraphHandle(animation_cache.graph.clone()));
     }
 }
