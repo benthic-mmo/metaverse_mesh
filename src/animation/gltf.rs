@@ -1,17 +1,18 @@
 use benthic_asset_pipeline::generated::DEFAULT_SKELETON;
 use benthic_protocol::{
-    default_animations::JointAnimation,
+    default_animations::{AnimationClip, JointAnimation},
     skeleton::{JointName, Skeleton},
 };
 use glam::{Mat4, Quat, Vec3};
 use gltf::{accessor::DataType, animation::Interpolation, binary::Glb};
 use gltf_json::{
-    self, Accessor, Index, Node, Value,
+    self,
     accessor::GenericComponentType,
     animation::{Channel, Target},
     buffer::View,
     scene::UnitQuaternion,
     validation::{Checked, USize64},
+    Accessor, Index, Node, Value,
 };
 use std::{
     borrow::Cow,
@@ -542,13 +543,13 @@ impl GltfBuilder {
 }
 
 pub fn export_filtered_animation(
-    animations: &[JointAnimation],
+    animations: &AnimationClip,
     joint_filter: &BTreeSet<JointName>,
     out_path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let skeleton: Skeleton = DEFAULT_SKELETON.clone();
     let mut builder = GltfBuilder::new("animation");
-    builder.add_filtered_animation(&skeleton, animations, joint_filter);
+    builder.add_filtered_animation(&skeleton, &animations.joints, joint_filter);
     builder.add_skin_from_skeleton(&skeleton, joint_filter);
     builder.finalize_scene("filtered_scene");
     builder.finalize(&out_path)

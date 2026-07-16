@@ -217,7 +217,6 @@ impl GltfBuilder {
                 };
 
             // Helper to push Vec4 accessor (quaternion)
-
             let push_accessor_quat =
                 |builder: &mut GltfBuilder, q: Quat, name: &str| -> Index<Accessor> {
                     let bytes: Vec<u8> = bytemuck::cast_slice(&[[q.x, q.y, q.z, q.w]]).to_vec();
@@ -329,7 +328,6 @@ impl GltfBuilder {
                 }
             }
 
-            // Optional but recommended normalization
             let sum: f32 = weights.iter().sum();
             if sum > 0.0 {
                 for w in &mut weights {

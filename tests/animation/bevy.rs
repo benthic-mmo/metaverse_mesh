@@ -1,4 +1,4 @@
-use benthic_protocol::default_animations::JointAnimation;
+use benthic_protocol::default_animations::{AnimationClip, JointAnimation};
 use benthic_protocol::skeleton::JointName;
 use bevy::asset::{AssetMode, AssetPlugin};
 use bevy::ecs::prelude::*;
@@ -106,7 +106,7 @@ fn generated_animation_path(name: &str) -> PathBuf {
     path.join(name)
 }
 
-fn load_animation(name: &str) -> Vec<JointAnimation> {
+fn load_animation(name: &str) -> AnimationClip {
     let path = benthic_asset_pipeline::generated_asset_path();
 
     let file = std::fs::File::open(

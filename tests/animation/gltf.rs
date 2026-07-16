@@ -1,4 +1,4 @@
-use benthic_protocol::default_animations::JointAnimation;
+use benthic_protocol::default_animations::AnimationClip;
 use benthic_protocol::skeleton::JointName;
 use metaverse_mesh::animation::gltf::export_filtered_animation;
 use std::collections::BTreeSet;
@@ -76,7 +76,7 @@ lazy_static! {
         JointName::FootRight,
     ]);
 }
-fn load_animation(name: &str) -> Vec<JointAnimation> {
+fn load_animation(name: &str) -> AnimationClip {
     let path = benthic_asset_pipeline::generated_asset_path();
 
     let file = std::fs::File::open(
@@ -101,7 +101,11 @@ fn generated_animation_path(name: &str) -> PathBuf {
 fn filter_skeleton() {
     let animations = load_animation("Stand");
 
-    if let Some(_j) = animations.iter().find(|a| a.joint == JointName::Pelvis) {
+    if let Some(_j) = animations
+        .joints
+        .iter()
+        .find(|a| a.joint == JointName::Pelvis)
+    {
         //println!("{:?}", j);
     }
 }
@@ -110,7 +114,7 @@ fn filter_skeleton() {
 fn build_all_bones_gltf() {
     let animations = load_animation("Stand");
 
-    let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.joints.iter().map(|j| j.joint).collect();
 
     let out_path = generated_animation_path("stand_animation.glb");
 
@@ -121,7 +125,7 @@ fn build_all_bones_gltf() {
 fn build_bow() {
     let animations = load_animation("Bow");
 
-    let joint_filter: BTreeSet<_> = animations.iter().map(|j| j.joint).collect();
+    let joint_filter: BTreeSet<_> = animations.joints.iter().map(|j| j.joint).collect();
 
     let out_path = generated_animation_path("bow_animation.glb");
 
