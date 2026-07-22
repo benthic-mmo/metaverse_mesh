@@ -1,0 +1,173 @@
+warning: use of deprecated method `quick_xml::events::attributes::Attribute::<'a>::decode_and_unescape_value`: use `Self::decoded_and_normalized_value()`
+   --> /home/skclark/benthic/benthic-serde-llsd/src/de/xml.rs:458:19
+    |
+458 |         let v = a.decode_and_unescape_value(attrs.decoder())?;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: `serde-llsd-benthic` (lib) generated 1 warning
+warning: static `BVH_JOINT_ALIASES` is never used
+   --> /home/skclark/benthic/benthic_protocol/src/skeleton.rs:479:8
+    |
+479 | static BVH_JOINT_ALIASES: Lazy<HashMap<&'static str, JointName>> = Lazy::new(|| {
+    |        ^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `UNITY_JOINT_ALIASES` is never used
+   --> /home/skclark/benthic/benthic_protocol/src/skeleton.rs:514:8
+    |
+514 | static UNITY_JOINT_ALIASES: Lazy<HashMap<&'static str, JointName>> = Lazy::new(|| {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: `benthic_protocol` (lib) generated 2 warnings
+   Compiling benthic_asset_pipeline v0.0.0 (/home/skclark/benthic/benthic_asset_pipeline)
+warning: `serde-llsd-benthic` (lib) generated 1 warning (1 duplicate)
+warning: `benthic_protocol` (lib) generated 2 warnings (2 duplicates)
+warning: benthic_asset_pipeline@0.0.0: Pelvis local Quat(2.1075344e-8, 0.7071082, -1.4751136e-7, 0.7071052)
+warning: benthic_asset_pipeline@0.0.0: Pelvis global Quat(2.1075344e-8, 0.7071082, -1.4751136e-7, 0.7071052)
+warning: benthic_asset_pipeline@0.0.0: Generating "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/default_skeleton.json"
+warning: benthic_asset_pipeline@0.0.0: Generating animation "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Bow.json"
+warning: benthic_asset_pipeline@0.0.0: ========== BASIS ==========
+warning: benthic_asset_pipeline@0.0.0: Basis rotation (1.5707964, 0.0, 1.5707964)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL T Vec3(0.040772267, -1.6503018, 0.026489213)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL R (3.1150982, 1.5212257, -3.1383665)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL T Vec3(0.042153426, -1.5604086, 0.041023877)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL R (2.7032864, -1.3860655, 2.722965)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL T Vec3(0.31415913, -1.3334049, 0.099203855)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL R (1.9104812, -1.2980621, 1.972244)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL T Vec3(0.11962442, -1.079533, 0.0559685)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL R (-0.053672466, 0.013348926, 0.10685006)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL T Vec3(-0.259445, -1.1634856, 0.21564855)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL R (-0.20994177, -0.33619794, 1.4610912)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL T Vec3(0.10806978, -1.1864867, -0.027765185)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL R (-2.8718202, 0.12846631, 1.2950954)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL T Vec3(-0.028044857, -1.2337313, -0.24611963)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL R (0.41549194, 0.31710052, 1.6042265)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL T Vec3(-0.008791655, -1.2389176, -0.019661367)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL R (1.3738208, 0.18797754, 1.4201195)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL T Vec3(0.05469552, 0.019853234, -0.14495124)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL R (-1.9650164, 1.5127087, 2.0688055)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL T Vec3(-0.051626287, 0.31694305, 0.2759887)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL R (-0.24947266, 0.09651189, -0.048660044)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL T Vec3(0.057275295, -0.2621243, -0.3505095)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL R (-2.8963978, 0.45163155, 2.8126988)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL T Vec3(-0.021710634, -0.075239405, 0.35321686)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL R (1.4086077, 0.04515731, -0.18936808)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL T Vec3(0.08818388, 0.044041455, 0.20485345)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL R (-0.042691965, -0.93301296, 0.053113785)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL T Vec3(0.110422134, -0.04212082, 0.1819152)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL R (-1.9311087, 0.2673964, 3.1297889)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL T Vec3(0.014670899, 0.20447385, -0.29475042)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL R (0.18035719, 0.069883056, 0.017815277)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL T Vec3(-0.016669892, 0.089531064, 0.0005415231)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL R (3.065493, 0.21831763, -3.1349964)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL T Vec3(0.040772267, -1.6503018, 0.026489213)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL R (3.1150982, 1.5212257, -3.1383665)
+warning: benthic_asset_pipeline@0.0.0: Generating animation "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Walk.json"
+warning: benthic_asset_pipeline@0.0.0: ========== BASIS ==========
+warning: benthic_asset_pipeline@0.0.0: Basis rotation (1.5707964, 0.0, 1.5707964)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL T Vec3(-0.0944072, -1.5651596, -0.3678344)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL R (1.2115141, 1.4667596, -0.98357785)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL T Vec3(-0.09700085, -1.4627925, -0.35812286)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL R (-2.8497565, -1.3267198, -3.0791988)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL T Vec3(0.38906643, -1.2187338, -0.30416456)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL R (2.1287954, -1.2404085, 1.8786113)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL T Vec3(0.11545445, -1.0025759, -0.24033877)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL R (0.22798675, -0.04396094, 0.09722015)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL T Vec3(0.11273995, -1.1871631, 0.39803138)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL R (-0.23283127, -0.38918784, 1.8175206)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL T Vec3(0.29554132, -1.2121395, -0.036651164)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL R (-2.8331702, 0.17975894, 1.1126422)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL T Vec3(-0.6402091, -0.85170186, -0.4018796)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL R (0.7185957, 0.10195365, 1.0631027)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL T Vec3(-0.15387793, -0.9392722, 0.1328676)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL R (1.2957194, 0.019568529, 1.3074617)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL T Vec3(-0.24156554, 0.09682238, -0.13839829)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL R (1.4124376, 1.3402305, -1.3241969)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL T Vec3(0.301635, 0.30497122, 0.30649036)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL R (-0.3107233, 0.090721674, 0.2653755)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL T Vec3(0.07211435, -0.024824262, -0.4660178)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL R (-3.1108747, 0.5577775, 3.077629)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL T Vec3(-0.123173, -0.19397864, 0.10965713)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL R (0.86754626, 0.08320901, 0.1215999)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL T Vec3(0.46247244, -0.24275301, 0.50727904)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL R (0.24364793, -0.5336738, 0.34734625)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL T Vec3(-0.22694302, -0.45017007, 0.51613235)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL R (-1.324117, 0.47717834, 2.639497)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL T Vec3(-0.11964929, 0.25722456, -0.46717992)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL R (0.3300076, 0.1263261, -0.081042215)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL T Vec3(0.013245254, 0.10127354, -0.012176983)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL R (3.0712037, 0.18596606, 3.1365342)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL T Vec3(-0.0944072, -1.5651596, -0.3678344)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL R (1.2115141, 1.4667596, -0.98357785)
+warning: benthic_asset_pipeline@0.0.0: Generating animation "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Stand.json"
+warning: benthic_asset_pipeline@0.0.0: ========== BASIS ==========
+warning: benthic_asset_pipeline@0.0.0: Basis rotation (1.5707964, 0.0, 1.5707964)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL T Vec3(-0.024876889, -1.5693676, 0.38022625)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET GLOBAL R (2.7735593, 1.2794756, -3.0379915)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL T Vec3(-0.020813648, -1.4556354, 0.4453216)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET GLOBAL R (0.5406991, -1.5132414, 0.8252273)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL T Vec3(0.25920045, -1.2973052, 0.11322847)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET GLOBAL R (1.4923387, -1.3475803, 1.5656066)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL T Vec3(0.08388478, -1.0307059, 0.057040215)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET GLOBAL R (-0.03056959, 0.07814185, 0.079606034)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL T Vec3(-0.5764009, -0.9049131, 0.6049101)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET GLOBAL R (-0.5691161, -0.11344691, 1.2251213)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL T Vec3(-0.0048975945, -0.6228045, -0.69303715)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET GLOBAL R (-2.2126336, 0.024382148, 1.3995723)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL T Vec3(0.34757784, -1.1444765, 0.10334384)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET GLOBAL R (-0.012037745, 0.68129975, 1.8653101)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL T Vec3(0.595302, -0.2135563, 0.9658487)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET GLOBAL R (0.07931458, 0.70095956, 1.6123779)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL T Vec3(0.056080684, 0.06878507, -0.10936605)
+warning: benthic_asset_pipeline@0.0.0: Head TARGET LOCAL R (-2.8067815, 1.4786319, 2.8823872)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL T Vec3(-0.09876874, 0.2630118, 0.2313868)
+warning: benthic_asset_pipeline@0.0.0: Neck TARGET LOCAL R (-0.22092806, -0.010146922, -0.07339624)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL T Vec3(1.0379502, -0.11646578, -0.9999824)
+warning: benthic_asset_pipeline@0.0.0: ElbowLeft TARGET LOCAL R (-1.7988906, 1.233047, 1.7271451)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL T Vec3(0.10276663, -0.44831, 0.45253024)
+warning: benthic_asset_pipeline@0.0.0: ShoulderLeft TARGET LOCAL R (1.3986866, 0.35433626, -0.23569301)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL T Vec3(0.98470026, 0.07521054, 0.83462924)
+warning: benthic_asset_pipeline@0.0.0: ElbowRight TARGET LOCAL R (0.00049707544, -0.07306881, -0.19465871)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL T Vec3(0.03793335, 0.05625564, -0.07696161)
+warning: benthic_asset_pipeline@0.0.0: ShoulderRight TARGET LOCAL R (-2.2179782, 0.106777176, -3.055624)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL T Vec3(-0.26295868, 0.23290479, -0.30061656)
+warning: benthic_asset_pipeline@0.0.0: Chest TARGET LOCAL R (0.17684804, -0.083591774, -0.19860046)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL T Vec3(-0.08945842, 0.09244335, -0.025305081)
+warning: benthic_asset_pipeline@0.0.0: Torso TARGET LOCAL R (3.0679731, 0.24939923, -3.1056204)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL T Vec3(-0.024876889, -1.5693676, 0.38022625)
+warning: benthic_asset_pipeline@0.0.0: Pelvis TARGET LOCAL R (2.7735593, 1.2794756, -3.0379915)
+warning: benthic_asset_pipeline@0.0.0: Generating animation "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Dance.json"
+   Compiling metaverse_mesh v0.2.0 (/home/skclark/benthic/metaverse_mesh)
+warning: unused import: `JointAnimation`
+ --> tests/animation/bevy.rs:1:59
+  |
+1 | use benthic_protocol::default_animations::{AnimationClip, JointAnimation};
+  |                                                           ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `metaverse_mesh` (test "lib") generated 1 warning (run `cargo fix --test "lib" -p metaverse_mesh` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.61s
+     Running unittests src/lib.rs (target/debug/deps/metaverse_mesh-76c077e5baf4982b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lib.rs (target/debug/deps/lib-db58feb0bcd10309)
+
+running 1 test
+[2m2026-07-20T20:13:38.250932Z[0m [32m INFO[0m [2mbevy_diagnostic::system_information_diagnostics_plugin::internal[0m[2m:[0m SystemInfo { os: "Linux (Fedora Linux 42)", kernel: "6.16.10-200.fc42.x86_64", cpu: "AMD Ryzen 7 PRO 7840HS w/ Radeon 780M Graphics", core_count: "8", memory: "61.4 GiB" }
+[2m2026-07-20T20:13:38.291829Z[0m [32m INFO[0m [2mbevy_render::renderer[0m[2m:[0m AdapterInfo { name: "AMD Radeon 780M Graphics (RADV PHOENIX)", vendor: 4098, device: 5567, device_type: IntegratedGpu, device_pci_bus_id: "0000:c4:00.0", driver: "radv", driver_info: "Mesa 25.1.9", backend: Vulkan, subgroup_min_size: 32, subgroup_max_size: 64, transient_saves_memory: false }
+[2m2026-07-20T20:13:38.711699Z[0m [32m INFO[0m [2mbevy_pbr::cluster[0m[2m:[0m GPU clustering is supported on this device.
+[2m2026-07-20T20:13:38.711893Z[0m [32m INFO[0m [2mbevy_render::batching::gpu_preprocessing[0m[2m:[0m GPU preprocessing is fully supported on this device.
+[2m2026-07-20T20:13:38.715255Z[0m [32m INFO[0m [2mbevy_winit::system[0m[2m:[0m Creating new window lib-db58feb0bcd10309 (65v0)
+[2m2026-07-20T20:13:52.047663Z[0m [32m INFO[0m [2mbevy_window::system[0m[2m:[0m No windows are open, exiting
+[2m2026-07-20T20:13:52.047746Z[0m [32m INFO[0m [2mbevy_winit::system[0m[2m:[0m Closing window 65v0
+test animation::bevy::display_animation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 14.05s
+

@@ -1,6 +1,6 @@
 use benthic_protocol::default_animations::AnimationClip;
-use benthic_protocol::skeleton::JointName;
-use metaverse_mesh::animation::gltf::export_filtered_animation;
+use benthic_protocol::skeleton::{JointName, Skeleton};
+use metaverse_mesh::animation::gltf::{export_animation_clip, export_filtered_animation};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -167,4 +167,23 @@ fn build_only_puffball_bvh() {
     let out_path = generated_animation_path("puffball_bow.glb");
 
     export_filtered_animation(&animations, &joint_filter, out_path).unwrap();
+}
+
+#[test]
+fn build_rotated_gltf() {
+    let path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Walk_rotated.json";
+    let skele_path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Walk_skeleton.json";
+
+    let file = std::fs::File::open(PathBuf::from(path)).unwrap();
+    let skele_file = std::fs::File::open(PathBuf::from(skele_path)).unwrap();
+
+    let clip: AnimationClip =
+        serde_json::from_reader(file).expect("failed to deserialize animation json");
+
+    let skeleton: Skeleton =
+        serde_json::from_reader(skele_file).expect("failed to deserialize skeleton json");
+
+    let out_path = generated_animation_path("Walk_rotated.glb");
+
+    export_animation_clip(&clip, out_path, skeleton).unwrap();
 }

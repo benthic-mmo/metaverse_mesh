@@ -554,3 +554,62 @@ pub fn export_filtered_animation(
     builder.finalize_scene("filtered_scene");
     builder.finalize(&out_path)
 }
+
+pub fn export_animation_clip(
+    clip: &AnimationClip,
+    out_path: PathBuf,
+    skeleton: Skeleton,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let joint_filter: BTreeSet<JointName> = clip.joints.iter().map(|j| j.joint).collect();
+
+    let mut builder = GltfBuilder::new("animation");
+    check_skeleton_cycles(&skeleton)?;
+    builder.add_filtered_animation(&skeleton, &clip.joints, &joint_filter);
+
+    builder.add_skin_from_skeleton(&skeleton, &joint_filter);
+
+    builder.finalize_scene("animation_scene");
+
+    builder.finalize(&out_path)?;
+
+    Ok(())
+}
+
+fn check_skeleton_cycles(skeleton: &Skeleton) -> Result<(), String> {
+    fn visit(
+        joint: JointName,
+        skeleton: &Skeleton,
+        visiting: &mut HashSet<JointName>,
+        visited: &mut HashSet<JointName>,
+    ) -> Result<(), String> {
+        if visiting.contains(&joint) {
+            return Err(format!("Skeleton cycle detected at {:?}", joint));
+        }
+
+        if visited.contains(&joint) {
+            return Ok(());
+        }
+
+        visiting.insert(joint);
+
+        if let Some(node) = skeleton.joints.get(&joint) {
+            for child in &node.children {
+                visit(*child, skeleton, visiting, visited)?;
+            }
+        }
+
+        visiting.remove(&joint);
+        visited.insert(joint);
+
+        Ok(())
+    }
+
+    let mut visiting = HashSet::new();
+    let mut visited = HashSet::new();
+
+    for joint in skeleton.joints.keys() {
+        visit(*joint, skeleton, &mut visiting, &mut visited)?;
+    }
+
+    Ok(())
+}
