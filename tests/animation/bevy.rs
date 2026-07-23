@@ -202,7 +202,8 @@ pub fn generate_example() {
 fn display_animation() {
     let mut app = App::new();
 
-    let animations = load_animation("Walk");
+    //let animations = load_animation("Stand_Correct");
+    let animations = load_animation("Dance");
 
     let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
