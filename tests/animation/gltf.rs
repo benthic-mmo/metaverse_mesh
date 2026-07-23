@@ -171,8 +171,8 @@ fn build_only_puffball_bvh() {
 
 #[test]
 fn build_rotated_gltf() {
-    let path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Walk_rotated.json";
-    let skele_path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Walk_skeleton.json";
+    let path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/Animations/Stand.json";
+    let skele_path = "/home/skclark/benthic/metaverse_mesh/target/debug/build/benthic_asset_pipeline-dd8db207f81e70e6/out/default_skeleton.json";
 
     let file = std::fs::File::open(PathBuf::from(path)).unwrap();
     let skele_file = std::fs::File::open(PathBuf::from(skele_path)).unwrap();

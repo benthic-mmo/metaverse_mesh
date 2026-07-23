@@ -59,7 +59,8 @@ impl GltfBuilder {
 
             joint_nodes.push(node_index);
 
-            ibm_matrices.push(joint.transforms.last().unwrap().transform.to_cols_array());
+            let ibm = joint.transforms[0].transform.inverse();
+            ibm_matrices.push(ibm.to_cols_array());
         }
 
         let ibm_accessor = self.push_mat4_accessor_flat(&ibm_matrices, "ibm");
@@ -285,12 +286,9 @@ impl GltfBuilder {
             if !joint_filter.contains(joint_name) {
                 continue;
             }
-            let t = joint.transforms[0].transform.to_cols_array();
-            let mat = Mat4::from_cols_array(&t);
-            let translation = mat.w_axis.truncate();
-            let rotation = Quat::from_mat4(&mat).normalize();
-            let scale = Vec3::new(1.0, 1.0, 1.0);
+            let local = joint.local_transforms[0].transform;
 
+            let (scale, rotation, translation) = local.to_scale_rotation_translation();
             let node_index = self.root.push(Node {
                 name: Some(joint_name.to_string()),
                 translation: Some([translation.x, translation.y, translation.z]),
@@ -562,8 +560,12 @@ pub fn export_animation_clip(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let joint_filter: BTreeSet<JointName> = clip.joints.iter().map(|j| j.joint).collect();
 
+    println!("{:?}", clip.root_transform);
+
+    let skeleton: Skeleton = DEFAULT_SKELETON.clone();
     let mut builder = GltfBuilder::new("animation");
     check_skeleton_cycles(&skeleton)?;
+
     builder.add_filtered_animation(&skeleton, &clip.joints, &joint_filter);
 
     builder.add_skin_from_skeleton(&skeleton, &joint_filter);
