@@ -560,8 +560,6 @@ pub fn export_animation_clip(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let joint_filter: BTreeSet<JointName> = clip.joints.iter().map(|j| j.joint).collect();
 
-    println!("{:?}", clip.root_transform);
-
     let skeleton: Skeleton = DEFAULT_SKELETON.clone();
     let mut builder = GltfBuilder::new("animation");
     check_skeleton_cycles(&skeleton)?;
