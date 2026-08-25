@@ -199,11 +199,19 @@ pub fn generate_example() {
 }
 
 #[test]
-fn display_animation() {
+fn run_stand() {
+    display_animation("Stand");
+}
+
+#[test]
+fn run_stand_correct() {
+    display_animation("Stand_Correct");
+}
+
+fn display_animation(animation: &str) {
     let mut app = App::new();
 
-    //let animations = load_animation("Stand_Correct");
-    let animations = load_animation("Stand_Correct");
+    let animations = load_animation(animation);
 
     let mut joint_filter = BTreeSet::new();
     joint_filter.extend(PUFFBALL_JOINT_FILTER.iter().copied());
