@@ -108,13 +108,12 @@ fn generated_animation_path(name: &str) -> PathBuf {
 
 fn load_animation(name: &str) -> AnimationClip {
     let path = benthic_asset_pipeline::generated_asset_path();
+    let filename = PathBuf::from(path)
+        .join("Animations")
+        .join(format!("{name}.json"));
 
-    let file = std::fs::File::open(
-        PathBuf::from(path)
-            .join("Animations")
-            .join(format!("{name}.json")),
-    )
-    .unwrap();
+    println!("{:?}", filename);
+    let file = std::fs::File::open(filename).unwrap();
 
     serde_json::from_reader(file).expect("failed to deserialize animation json")
 }
@@ -199,13 +198,18 @@ pub fn generate_example() {
 }
 
 #[test]
-fn run_stand() {
+fn run_stand_only() {
     display_animation("Stand");
 }
 
 #[test]
 fn run_stand_correct() {
     display_animation("Stand_Correct");
+}
+
+#[test]
+fn run_standy() {
+    display_animation("standy");
 }
 
 fn display_animation(animation: &str) {
