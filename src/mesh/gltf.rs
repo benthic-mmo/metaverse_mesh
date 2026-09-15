@@ -1,8 +1,9 @@
 use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
 use benthic_protocol::skeleton::JointName;
-use glam::{usize, Quat, Vec3};
+use glam::{Quat, Vec3, usize};
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
+    Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
     accessor::{ComponentType, GenericComponentType},
     buffer::{Stride, Target, View},
     image::MimeType,
@@ -14,7 +15,6 @@ use gltf_json::{
         Checked::{self, Valid},
         USize64,
     },
-    Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
 };
 use rgb::bytemuck;
 use std::{
@@ -33,6 +33,7 @@ struct GltfBuilder {
 }
 
 impl GltfBuilder {
+    // create a new GLTFBuilder, initialized to default values.
     fn new(buffer_name: &str) -> Self {
         let mut root = gltf_json::Root::default();
         let buffer_index = root.push(gltf_json::Buffer {
@@ -49,8 +50,11 @@ impl GltfBuilder {
             nodes: Vec::new(),
         }
     }
+
+    // GLTFs expect every buffer to be aligned to 4. For some values that are not aligned to 4, this
+    // function adds 0 to the end of the buffer which is not used and never read.
     fn align_4(&mut self) {
-        while self.combined_buffer.len() % 4 != 0 {
+        while !self.combined_buffer.len().is_multiple_of(4) {
             self.combined_buffer.push(0);
         }
     }
@@ -134,15 +138,21 @@ impl GltfBuilder {
             max: None,
         })
     }
+
+    // This generates a single animation frame of the bind pose and applies it to the skeleton.
+    // This allows some engines to register that this model should be animated.
     pub fn add_bind_pose_animation(
         &mut self,
         avatar: &AvatarObject,
         bones: &BTreeSet<JointName>,
         joint_to_node: &HashMap<JointName, Index<Node>>,
+        effective_parents: &HashMap<JointName, Option<JointName>>,
     ) {
         use gltf_json::*;
+
         let mut input_bytes = Vec::new();
         input_bytes.extend_from_slice(&0.0f32.to_le_bytes());
+
         self.align_4();
         let input_offset = self.combined_buffer.len();
         self.combined_buffer.extend_from_slice(&input_bytes);
@@ -176,20 +186,39 @@ impl GltfBuilder {
         let mut channels = Vec::new();
         let mut samplers = Vec::new();
 
-        // --- Per-joint bind pose ---
         for joint_name in bones {
             let node_index = joint_to_node[joint_name];
             let joint = &avatar.global_skeleton.joints[joint_name];
-            let last_transform = joint.local_transforms.last().unwrap().transform;
-            let (scale, rotation, translation) = last_transform.to_scale_rotation_translation();
 
-            // Helper to push Vec3 accessor
+            let global_transform = joint.global_transforms.last().unwrap().transform;
+
+            let local_transform = match effective_parents[joint_name] {
+                Some(parent_name) => {
+                    let parent_global = avatar
+                        .global_skeleton
+                        .joints
+                        .get(&parent_name)
+                        .unwrap()
+                        .global_transforms
+                        .last()
+                        .unwrap()
+                        .transform;
+
+                    parent_global * global_transform.inverse()
+                }
+                None => global_transform.inverse(),
+            };
+
+            let (scale, rotation, translation) = local_transform.to_scale_rotation_translation();
+
             let push_accessor_vec3 =
                 |builder: &mut GltfBuilder, vec: Vec3, name: &str| -> Index<Accessor> {
                     let bytes: Vec<u8> = bytemuck::cast_slice(&[[vec.x, vec.y, vec.z]]).to_vec();
+
                     builder.align_4();
                     let offset = builder.combined_buffer.len();
                     builder.combined_buffer.extend_from_slice(&bytes);
+
                     let view = builder.root.push(View {
                         buffer: builder.buffer_index,
                         byte_length: bytes.len().into(),
@@ -200,6 +229,7 @@ impl GltfBuilder {
                         extensions: Default::default(),
                         extras: Default::default(),
                     });
+
                     builder.root.push(Accessor {
                         buffer_view: Some(view),
                         byte_offset: Some(USize64(0)),
@@ -216,14 +246,14 @@ impl GltfBuilder {
                     })
                 };
 
-            // Helper to push Vec4 accessor (quaternion)
-
             let push_accessor_quat =
                 |builder: &mut GltfBuilder, q: Quat, name: &str| -> Index<Accessor> {
                     let bytes: Vec<u8> = bytemuck::cast_slice(&[[q.x, q.y, q.z, q.w]]).to_vec();
+
                     builder.align_4();
                     let offset = builder.combined_buffer.len();
                     builder.combined_buffer.extend_from_slice(&bytes);
+
                     let view = builder.root.push(View {
                         buffer: builder.buffer_index,
                         byte_length: bytes.len().into(),
@@ -234,6 +264,7 @@ impl GltfBuilder {
                         extensions: Default::default(),
                         extras: Default::default(),
                     });
+
                     builder.root.push(Accessor {
                         buffer_view: Some(view),
                         byte_offset: Some(USize64(0)),
@@ -250,10 +281,9 @@ impl GltfBuilder {
                     })
                 };
 
-            let t_acc = push_accessor_vec3(self, translation.into(), &format!("{}_T", joint_name));
-
+            let t_acc = push_accessor_vec3(self, translation, &format!("{}_T", joint_name));
             let r_acc = push_accessor_quat(self, rotation, &format!("{}_R", joint_name));
-            let s_acc = push_accessor_vec3(self, scale.into(), &format!("{}_S", joint_name));
+            let s_acc = push_accessor_vec3(self, scale, &format!("{}_S", joint_name));
 
             for (path_str, acc) in &[
                 ("translation", t_acc),
@@ -261,6 +291,7 @@ impl GltfBuilder {
                 ("scale", s_acc),
             ] {
                 let sampler_index = samplers.len();
+
                 samplers.push(Sampler {
                     input: input_accessor,
                     interpolation: Valid(Interpolation::Step),
@@ -268,6 +299,7 @@ impl GltfBuilder {
                     extensions: Default::default(),
                     extras: Default::default(),
                 });
+
                 channels.push(Channel {
                     sampler: Index::new(sampler_index as u32),
                     target: ChannelTarget {
@@ -319,17 +351,14 @@ impl GltfBuilder {
 
             for i in 0..4 {
                 if let (Some(joint_name), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
+                    && weight > 0.0
+                    && let Some(&idx) = bone_index.get(joint_name)
                 {
-                    if weight > 0.0 {
-                        if let Some(&idx) = bone_index.get(joint_name) {
-                            joints[i] = idx;
-                            weights[i] = weight;
-                        }
-                    }
+                    joints[i] = idx;
+                    weights[i] = weight;
                 }
             }
 
-            // Optional but recommended normalization
             let sum: f32 = weights.iter().sum();
             if sum > 0.0 {
                 for w in &mut weights {
@@ -539,10 +568,11 @@ impl GltfBuilder {
         Index<gltf_json::Texture>,
         Index<gltf_json::Material>,
     ) {
-        let image_data = fs::read(image_path).expect("Failed to read image file");
+        let image_data = fs::read(image_path).unwrap_or_else(|e| {
+            panic!("Failed to read image file {}: {}", image_path.display(), e);
+        });
 
         self.align_4();
-
         let buffer_byte_offset = self.combined_buffer.len() as u64;
         self.combined_buffer.extend_from_slice(&image_data);
 
@@ -644,7 +674,7 @@ impl GltfBuilder {
     }
 
     fn finalize(mut self, path: &PathBuf) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        self.root.buffers[self.buffer_index.value() as usize].byte_length =
+        self.root.buffers[self.buffer_index.value()].byte_length =
             gltf_json::validation::USize64::from(self.combined_buffer.len());
 
         let json_string = gltf_json::serialize::to_string(&self.root)?;
@@ -657,7 +687,17 @@ impl GltfBuilder {
             json: Cow::Owned(json_string.into_bytes()),
             bin: Some(Cow::Owned(self.combined_buffer)),
         };
-        glb.to_writer(File::create(&path)?)?;
+        let file = File::create(path).map_err(|e| {
+            format!("File::create failed:\n  path: {:?}\n  exists: {}\n  parent: {:?}\n  parent_exists: {}\n  error: {:?}",
+                path,
+                path.exists(),
+                path.parent(),
+                path.parent().map(|p| p.exists()).unwrap_or(false),
+                e,
+            )
+        })?;
+
+        glb.to_writer(file)?;
         Ok(path.clone())
     }
 }
@@ -677,7 +717,7 @@ pub fn build_mesh_gltf(
         None,
     );
     builder.add_node_with_mesh(mesh_index, &object.name);
-    builder.finalize_scene(&format!("Scene"));
+    builder.finalize_scene("Scene");
     builder.finalize(&path)?;
     Ok(())
 }
@@ -697,7 +737,7 @@ pub fn build_mesh_y_up(
         None,
     );
     builder.add_node_with_mesh(mesh_index, &object.name);
-    builder.rotated_finalize_scene(&format!("Scene"));
+    //builder.rotated_finalize_scene("Scene");
     builder.finalize(&path)?;
     Ok(())
 }
@@ -730,7 +770,7 @@ pub fn build_mesh_scene_gltf(
 
         builder.add_node_with_mesh(mesh_index, &object.name);
     }
-    builder.rotated_finalize_scene(&format!("Scene"));
+    builder.finalize_scene("Scene");
     builder.finalize(&path)?;
     Ok(())
 }
@@ -745,9 +785,12 @@ pub fn build_skinned_mesh_gltf(
     let mut mesh_nodes = Vec::new();
     let mut skinned_nodes = Vec::new();
 
-    // 2️⃣ Add mesh objects
+    // Add mesh objects
     for object in &avatar.objects {
-        let json_str = fs::read_to_string(&object)?;
+        let json_str = fs::read_to_string(object).map_err(|e| {
+            eprintln!("Failed to read object: {:?}: {:?}", object, e);
+            e
+        })?;
         let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
 
         for part in parts {
@@ -807,47 +850,90 @@ pub fn build_skinned_mesh_gltf(
         return Ok(());
     }
 
-    // 4️⃣ For skinned meshes: add joint nodes and inverse bind matrices
+    // For skinned meshes: add joint nodes and inverse bind matrices
     let mut joint_to_node: HashMap<JointName, Index<Node>> = HashMap::new();
     let mut skeleton_nodes = Vec::new();
     let mut ibm_matrices = Vec::new();
+    let mut effective_parents: HashMap<JointName, Option<JointName>> = HashMap::new();
 
+    // First determine the nearest used ancestor for every joint.
     for joint_name in &bones {
-        if let Some(joint) = avatar.global_skeleton.joints.get(joint_name) {
-            let (scale, rotation, translation) = joint
-                .local_transforms
-                .last()
-                .unwrap()
-                .transform
-                .to_scale_rotation_translation();
+        let Some(joint) = avatar.global_skeleton.joints.get(joint_name) else {
+            continue;
+        };
 
-            let joint_node_index = builder.root.push(Node {
-                name: Some(joint_name.to_string()),
-                scale: Some(scale.into()),
-                rotation: Some(UnitQuaternion([
-                    rotation.x, rotation.y, rotation.z, rotation.w,
-                ])),
-                translation: Some(translation.into()),
-                ..Default::default()
-            });
+        let mut parent = joint.parent;
 
-            joint_to_node.insert(*joint_name, joint_node_index);
-            skeleton_nodes.push(joint_node_index);
-            ibm_matrices.push(joint.transforms.last().unwrap().transform.to_cols_array());
+        while let Some(parent_name) = parent {
+            if bones.contains(&parent_name) {
+                effective_parents.insert(*joint_name, Some(parent_name));
+                break;
+            }
+
+            parent = avatar
+                .global_skeleton
+                .joints
+                .get(&parent_name)
+                .and_then(|j| j.parent);
         }
+
+        effective_parents.entry(*joint_name).or_insert(None);
     }
 
-    // 5️⃣ Setup parent/child hierarchy
+    // Create the nodes using transforms relative to their effective parent.
     for joint_name in &bones {
-        if let Some(joint) = avatar.global_skeleton.joints.get(joint_name) {
-            if let Some(parent_name) = joint.parent {
-                let parent_index = joint_to_node[&parent_name];
-                let child_index = joint_to_node[joint_name];
-                builder.root.nodes[parent_index.value()]
-                    .children
-                    .get_or_insert_with(Vec::new)
-                    .push(child_index);
+        let Some(joint) = avatar.global_skeleton.joints.get(joint_name) else {
+            continue;
+        };
+
+        let global_transform = joint.global_transforms.last().unwrap().transform;
+
+        let local_transform = match effective_parents[joint_name] {
+            Some(parent_name) => {
+                let parent_global = avatar
+                    .global_skeleton
+                    .joints
+                    .get(&parent_name)
+                    .unwrap()
+                    .global_transforms
+                    .last()
+                    .unwrap()
+                    .transform;
+
+                parent_global * global_transform.inverse()
             }
+            None => global_transform.inverse(),
+        };
+
+        let (scale, rotation, translation) = local_transform.to_scale_rotation_translation();
+
+        let joint_node_index = builder.root.push(Node {
+            name: Some(joint_name.to_string()),
+            scale: Some(scale.into()),
+            rotation: Some(UnitQuaternion([
+                rotation.x, rotation.y, rotation.z, rotation.w,
+            ])),
+            translation: Some(translation.into()),
+            ..Default::default()
+        });
+
+        joint_to_node.insert(*joint_name, joint_node_index);
+        skeleton_nodes.push(joint_node_index);
+
+        ibm_matrices.push(global_transform.to_cols_array());
+    }
+
+    // Wire the nodes together using the nearest used ancestor.
+    for joint_name in &bones {
+        let child_index = joint_to_node[joint_name];
+
+        if let Some(Some(parent_name)) = effective_parents.get(joint_name) {
+            let parent_index = joint_to_node[parent_name];
+
+            builder.root.nodes[parent_index.value()]
+                .children
+                .get_or_insert_with(Vec::new)
+                .push(child_index);
         }
     }
 
@@ -868,7 +954,7 @@ pub fn build_skinned_mesh_gltf(
     let skin_index = builder.root.push(Skin {
         joints: skeleton_nodes.clone(),
         inverse_bind_matrices: Some(ibm_accessor_index),
-        skeleton: root_joints.get(0).cloned(),
+        skeleton: root_joints.first().cloned(),
         extensions: Default::default(),
         extras: Default::default(),
         name: Some("AvatarSkin".to_string()),
@@ -884,7 +970,7 @@ pub fn build_skinned_mesh_gltf(
         ..Default::default()
     });
 
-    builder.add_bind_pose_animation(&avatar, &bones, &joint_to_node);
+    builder.add_bind_pose_animation(&avatar, &bones, &joint_to_node, &effective_parents);
 
     let non_skinned_mesh_nodes: Vec<Index<Node>> = mesh_nodes
         .into_iter()
@@ -897,7 +983,7 @@ pub fn build_skinned_mesh_gltf(
             skinned_nodes
                 .iter()
                 .cloned() // skinned meshes go directly under scene root
-                .chain(non_skinned_mesh_nodes.into_iter())
+                .chain(non_skinned_mesh_nodes)
                 .chain(std::iter::once(skeleton_root_index)) // skeleton root last
                 .collect(),
         ),
@@ -921,7 +1007,7 @@ fn to_padded_byte_vector(data: &[Vec3]) -> Vec<u8> {
     let byte_slice: &[u8] = bytemuck::cast_slice(&flat);
     let mut new_vec: Vec<u8> = byte_slice.to_owned();
 
-    while new_vec.len() % 4 != 0 {
+    while !new_vec.len().is_multiple_of(4) {
         new_vec.push(0); // pad to multiple of four bytes
     }
 
