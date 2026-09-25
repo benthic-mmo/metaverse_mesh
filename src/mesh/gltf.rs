@@ -17,6 +17,7 @@ use gltf_json::{
     },
 };
 use rgb::bytemuck;
+use std::f32::consts::FRAC_PI_2;
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
@@ -739,7 +740,7 @@ pub fn build_mesh_y_up(
         None,
     );
     builder.add_node_with_mesh(mesh_index, &object.name);
-    //builder.rotated_finalize_scene("Scene");
+    builder.rotated_finalize_scene("Scene");
     builder.finalize(&path)?;
     Ok(())
 }
@@ -992,13 +993,19 @@ pub fn build_skinned_mesh_gltf(
         ..Default::default()
     });
 
+    let rotation = Quat::from_rotation_y(-FRAC_PI_2)
+        * Quat::from_rotation_z(FRAC_PI_2)
+        * Quat::from_rotation_x(-FRAC_PI_2);
+    builder.root.nodes[scene_root_index.value()].rotation = Some(UnitQuaternion([
+        rotation.x, rotation.y, rotation.z, rotation.w,
+    ]));
+
     builder.root.push(Scene {
         name: Some("AvatarScene".to_string()),
         nodes: vec![scene_root_index],
         extensions: Default::default(),
         extras: Default::default(),
     });
-
     builder.finalize(&path)?;
     Ok(())
 }
