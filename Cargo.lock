@@ -445,12 +445,13 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "benthic_default_asset_converter"
-version = "0.2.1"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63c1e87b924fcf8880093c647c672323f70e6f2e761fccc309d4a17503d272cf"
+checksum = "29540a080263c9e7a5f1c20b3dffeda624fce17bdbd1310c8381cce2dfcd0bf1"
 dependencies = [
  "anyhow",
- "benthic_protocol",
+ "benthic_protocol 0.2.1",
+ "benthic_protocol 0.3.1",
  "bvh_anim",
  "bytemuck",
  "glam",
@@ -470,6 +471,30 @@ name = "benthic_protocol"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0da5f195f14eed962fb3f795e7f872dbeae2e06c0f200a808b5b209ab8c3980"
+dependencies = [
+ "anyhow",
+ "arc",
+ "dirs",
+ "glam",
+ "indexmap",
+ "once_cell",
+ "rgb",
+ "serde",
+ "serde-llsd-benthic",
+ "serde_derive",
+ "serde_json",
+ "sqlx",
+ "strum",
+ "strum_macros",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "benthic_protocol"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00f52b27d7360c27f579e41d32b4537e7647eda0ab8569f1c328de92a42de328"
 dependencies = [
  "anyhow",
  "arc",
@@ -4044,10 +4069,10 @@ dependencies = [
 
 [[package]]
 name = "metaverse_mesh"
-version = "0.2.1"
+version = "0.3.1"
 dependencies = [
  "benthic_default_asset_converter",
- "benthic_protocol",
+ "benthic_protocol 0.3.1",
  "bevy",
  "bevy_panorbit_camera",
  "bevy_world_serialization",
