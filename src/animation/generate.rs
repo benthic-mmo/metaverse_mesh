@@ -50,7 +50,7 @@ where
     let used_joints = used_joints(&target_skeleton);
 
     let animation = load_animation(animation_json_path)?;
-    let skeleton = &DEFAULT_SKELETON;
+    let skeleton = &DEFAULT_SKELETON.clone();
 
     let animation_clip = AnimationClip {
         bind_skeleton: filter_bind_skeleton(skeleton, &used_joints)?,
