@@ -1,17 +1,24 @@
 [package]
 name = "metaverse_mesh"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Skyler Clark<skylerjaneclark@gmail.com>"]
 description = "mesh handling for the open metaverse"
 license = "AGPL-3.0-or-later"
+homepage= "https://benthic-mmo.github.io/"
+repository = "https://github.com/benthic-mmo/metaverse_mesh"
 edition = "2024"
+
+exclude = [
+    "tests/assets/**",
+    "tests/**",
+]
 
 [dependencies]
 glam = "0.32.1"
 gltf = "1.4.1"
 gltf-json = "1.4.1"
-benthic_protocol = {path = "../metaverse_client/crates/benthic_protocol"}
-default_asset_converter = {path = "../metaverse_client/crates/default_asset_converter/", features=["animations"]}
+benthic_protocol = "0.2.1"
+benthic_default_asset_converter = {version = "0.2.1", features=["animations"]}
 rgb = "0.8.53"
 serde_json = "1.0.150"
 regex = "1.12.4"
