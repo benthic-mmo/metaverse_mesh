@@ -444,12 +444,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
-name = "benthic_default_assets"
-version = "0.0.0"
+name = "benthic_default_asset_converter"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9789b7b1e87192f8ebf1b48b7cdea718e86459fc2f476c6ea3273e4bc148fa30"
+dependencies = [
+ "anyhow",
+ "benthic_protocol",
+ "bvh_anim",
+ "bytemuck",
+ "glam",
+ "gltf",
+ "gltf-json",
+ "indexmap",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "uuid",
+]
 
 [[package]]
 name = "benthic_protocol"
-version = "0.1.0"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53552b6b75b56b7325e4f33056877cfd216c2ad7dadd56ee0f10b38727700d42"
 dependencies = [
  "anyhow",
  "arc",
@@ -2557,27 +2577,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
-name = "default_asset_converter"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "benthic_default_assets",
- "benthic_protocol",
- "bvh_anim",
- "bytemuck",
- "glam",
- "gltf",
- "gltf-json",
- "indexmap",
- "once_cell",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "uuid",
-]
-
-[[package]]
 name = "derive_more"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4045,13 +4044,13 @@ dependencies = [
 
 [[package]]
 name = "metaverse_mesh"
-version = "0.2.0"
+version = "0.3.2"
 dependencies = [
+ "benthic_default_asset_converter",
  "benthic_protocol",
  "bevy",
  "bevy_panorbit_camera",
  "bevy_world_serialization",
- "default_asset_converter",
  "glam",
  "gltf",
  "gltf-json",
@@ -5459,7 +5458,9 @@ dependencies = [
 
 [[package]]
 name = "serde-llsd-benthic"
-version = "0.0.2"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f98b31352f34a0169da7d46b5b472327f1f9918163585c348e02deb43f2a9b9e"
 dependencies = [
  "anyhow",
  "ascii85",
