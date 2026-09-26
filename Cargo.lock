@@ -445,13 +445,12 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "benthic_default_asset_converter"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29540a080263c9e7a5f1c20b3dffeda624fce17bdbd1310c8381cce2dfcd0bf1"
+checksum = "9789b7b1e87192f8ebf1b48b7cdea718e86459fc2f476c6ea3273e4bc148fa30"
 dependencies = [
  "anyhow",
- "benthic_protocol 0.2.1",
- "benthic_protocol 0.3.1",
+ "benthic_protocol",
  "bvh_anim",
  "bytemuck",
  "glam",
@@ -468,33 +467,9 @@ dependencies = [
 
 [[package]]
 name = "benthic_protocol"
-version = "0.2.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0da5f195f14eed962fb3f795e7f872dbeae2e06c0f200a808b5b209ab8c3980"
-dependencies = [
- "anyhow",
- "arc",
- "dirs",
- "glam",
- "indexmap",
- "once_cell",
- "rgb",
- "serde",
- "serde-llsd-benthic",
- "serde_derive",
- "serde_json",
- "sqlx",
- "strum",
- "strum_macros",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "benthic_protocol"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00f52b27d7360c27f579e41d32b4537e7647eda0ab8569f1c328de92a42de328"
+checksum = "53552b6b75b56b7325e4f33056877cfd216c2ad7dadd56ee0f10b38727700d42"
 dependencies = [
  "anyhow",
  "arc",
@@ -4069,10 +4044,10 @@ dependencies = [
 
 [[package]]
 name = "metaverse_mesh"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "benthic_default_asset_converter",
- "benthic_protocol 0.3.1",
+ "benthic_protocol",
  "bevy",
  "bevy_panorbit_camera",
  "bevy_world_serialization",
@@ -5483,9 +5458,9 @@ dependencies = [
 
 [[package]]
 name = "serde-llsd-benthic"
-version = "0.2.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0472245df735bf959d27d3d2f5a786fd5f121b1aba1b7c8fdf4bc3b014723f80"
+checksum = "f98b31352f34a0169da7d46b5b472327f1f9918163585c348e02deb43f2a9b9e"
 dependencies = [
  "anyhow",
  "ascii85",
