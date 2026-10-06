@@ -1,6 +1,7 @@
 use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
-use benthic_protocol::skeleton::JointName;
+use benthic_protocol::skeleton::{JointName, SkinJoint};
 use glam::{Quat, Vec3, usize};
+use gltf::material::AlphaMode;
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
 use gltf_json::{
     Accessor, Index, Material, Mesh, Node, Scene, Skin, Value,
@@ -352,9 +353,12 @@ impl GltfBuilder {
             let mut joints = [0u8; 4];
             let mut weights = [0.0f32; 4];
 
+            // only process Joints, and not collision joints.
+            // TODO: Process collision joints.
             for i in 0..4 {
-                if let (Some(joint_name), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
+                if let (Some(skin_joint), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
                     && weight > 0.0
+                    && let SkinJoint::Joint(joint_name) = skin_joint
                     && let Some(&idx) = bone_index.get(joint_name)
                 {
                     joints[i] = idx;
@@ -563,6 +567,29 @@ impl GltfBuilder {
         })
     }
 
+    pub fn rotated_finalize_scene(&mut self, name: &str) {
+        let rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+
+        // Wrap existing nodes under this rotated root
+        let rotated_root_index = self.root.push(Node {
+            children: Some(self.nodes.clone()),
+            name: Some("RotatedRoot".to_string()),
+            rotation: Some(UnitQuaternion([
+                rotation.x, rotation.y, rotation.z, rotation.w,
+            ])),
+            ..Default::default()
+        });
+
+        // Create scene referencing rotated root
+        self.root.push(Scene {
+            nodes: vec![rotated_root_index],
+            name: Some(format!("{}_rotated_scene", name)),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        self.nodes.clear();
+    }
     pub fn add_texture(
         &mut self,
         image_path: &PathBuf,
@@ -576,6 +603,7 @@ impl GltfBuilder {
         });
 
         self.align_4();
+
         let buffer_byte_offset = self.combined_buffer.len() as u64;
         self.combined_buffer.extend_from_slice(&image_data);
 
@@ -590,10 +618,14 @@ impl GltfBuilder {
             extras: Default::default(),
         });
 
-        let mime_type = if image_path.extension().and_then(|s| s.to_str()) == Some("png") {
-            MimeType("image/png".to_string())
-        } else {
-            MimeType("image/jpeg".to_string())
+        let mime_type = match image_path.extension().and_then(|s| s.to_str()) {
+            Some("png") => MimeType("image/png".to_string()),
+            Some("jpg" | "jpeg") => MimeType("image/jpeg".to_string()),
+            extension => panic!(
+                "Unsupported texture format {:?}: {}",
+                extension,
+                image_path.display()
+            ),
         };
 
         let image_index = self.root.push(gltf_json::Image {
@@ -625,35 +657,12 @@ impl GltfBuilder {
                 roughness_factor: StrengthFactor(1.0),
                 ..Default::default()
             },
+            alpha_mode: Checked::Valid(AlphaMode::Blend),
             name: Some("material_with_texture".to_string()),
             ..Default::default()
         });
 
         (image_index, texture_index, material_index)
-    }
-
-    pub fn rotated_finalize_scene(&mut self, name: &str) {
-        let rotation = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
-
-        // Wrap existing nodes under this rotated root
-        let rotated_root_index = self.root.push(Node {
-            children: Some(self.nodes.clone()),
-            name: Some("RotatedRoot".to_string()),
-            rotation: Some(UnitQuaternion([
-                rotation.x, rotation.y, rotation.z, rotation.w,
-            ])),
-            ..Default::default()
-        });
-
-        // Create scene referencing rotated root
-        self.root.push(Scene {
-            nodes: vec![rotated_root_index],
-            name: Some(format!("{}_rotated_scene", name)),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
-
-        self.nodes.clear();
     }
 
     pub fn finalize_scene(&mut self, name: &str) {
@@ -745,27 +754,40 @@ pub fn build_mesh_y_up(
     Ok(())
 }
 
+/// Converts a byte vector to a vector aligned to a mutiple of 4
+fn to_padded_byte_vector(data: &[Vec3]) -> Vec<u8> {
+    let flat: Vec<[f32; 3]> = data.iter().map(|v| [v.x, v.y, v.z]).collect();
+    let byte_slice: &[u8] = bytemuck::cast_slice(&flat);
+    let mut new_vec: Vec<u8> = byte_slice.to_owned();
+
+    while !new_vec.len().is_multiple_of(4) {
+        new_vec.push(0); // pad to multiple of four bytes
+    }
+
+    new_vec
+}
+
 pub fn build_mesh_scene_gltf(
     objects: Vec<RenderObject>,
     path: PathBuf,
 ) -> Result<(), MetaverseMeshError> {
     let mut builder = GltfBuilder::new("Combined Avatar");
+
     for object in objects {
-        let (uvs, _texture, material) =
-            if let (Some(uv), Some(tex)) = (object.uv.as_ref(), object.texture.as_ref()) {
-                let uv_accessor = uv.clone();
-                let (_image_index, texture_index, material_index) = builder.add_texture(tex);
-                (Some(uv_accessor), Some(texture_index), Some(material_index))
+        let (uvs, material) =
+            if let (Some(uv), Some(texture_path)) = (object.uv.as_ref(), object.texture.as_ref()) {
+                let (_, _, material_index) = builder.add_texture(texture_path);
+
+                (Some(uv.as_slice()), Some(material_index))
             } else {
-                (None, None, None)
+                (None, None)
             };
-        builder.add_uvs(&object.uv.unwrap());
-        builder.add_texture(&object.texture.unwrap());
+
         let mesh_index = builder.add_mesh(
             &object.name,
             &object.vertices,
             &object.indices,
-            uvs.as_deref(),
+            uvs,
             material,
             None,
             None,
@@ -773,8 +795,10 @@ pub fn build_mesh_scene_gltf(
 
         builder.add_node_with_mesh(mesh_index, &object.name);
     }
+
     builder.finalize_scene("Scene");
     builder.finalize(&path)?;
+
     Ok(())
 }
 
@@ -788,44 +812,42 @@ pub fn build_skinned_mesh_gltf(
     let mut mesh_nodes = Vec::new();
     let mut skinned_nodes = Vec::new();
 
-    // Add mesh objects
     for object in &avatar.objects {
         let json_str = fs::read_to_string(object).map_err(|e| {
             eprintln!("Failed to read object: {:?}: {:?}", object, e);
             e
         })?;
+
         let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
 
         for part in parts {
-            // Handle texture & UVs
-            let (uvs, _texture, material) =
-                if let (Some(uv), Some(tex)) = (part.uv.as_ref(), part.texture.as_ref()) {
-                    let (_image_index, _texture_index, material_index) = builder.add_texture(tex);
-                    (Some(uv), Some(_texture_index), Some(material_index))
+            let (uvs, material) =
+                if let (Some(uv), Some(texture_path)) = (part.uv.as_ref(), part.texture.as_ref()) {
+                    let (_, _, material_index) = builder.add_texture(texture_path);
+
+                    (Some(uv.as_slice()), Some(material_index))
                 } else {
-                    (None, None, None)
+                    (None, None)
                 };
 
-            // Handle skin/joint data if present
             let (joint_indices_accessor, joint_weights_accessor) = if let Some(skin) = &part.skin {
                 builder.add_joint_data(skin.weights.clone(), &bones)
             } else {
                 (None, None)
             };
 
-            // Add mesh
             let mesh_index = builder.add_mesh(
                 &part.name,
                 &part.vertices,
                 &part.indices,
-                uvs.map(|v| v.as_slice()),
+                uvs,
                 material,
                 joint_indices_accessor,
                 joint_weights_accessor,
             );
 
-            // Add node
             let node_index = builder.add_node_with_mesh(mesh_index, &part.name);
+
             mesh_nodes.push(node_index);
 
             if joint_indices_accessor.is_some() || joint_weights_accessor.is_some() {
@@ -834,7 +856,6 @@ pub fn build_skinned_mesh_gltf(
         }
     }
 
-    // 3️⃣ If there are no skinned meshes, just finalize scene normally
     if bones.is_empty() {
         let scene_root_index = builder.root.push(Node {
             name: Some("SceneRoot".to_string()),
@@ -853,13 +874,13 @@ pub fn build_skinned_mesh_gltf(
         return Ok(());
     }
 
-    // For skinned meshes: add joint nodes and inverse bind matrices
     let mut joint_to_node: HashMap<JointName, Index<Node>> = HashMap::new();
+
     let mut skeleton_nodes = Vec::new();
     let mut ibm_matrices = Vec::new();
     let mut effective_parents: HashMap<JointName, Option<JointName>> = HashMap::new();
 
-    // First determine the nearest used ancestor for every joint.
+    // Find the nearest used ancestor for every joint.
     for joint_name in &bones {
         let Some(joint) = avatar.global_skeleton.joints.get(joint_name) else {
             continue;
@@ -883,7 +904,8 @@ pub fn build_skinned_mesh_gltf(
         effective_parents.entry(*joint_name).or_insert(None);
     }
 
-    // Create the nodes using transforms relative to their effective parent.
+    // Create joint nodes using transforms relative to their
+    // nearest used ancestor.
     for joint_name in &bones {
         let Some(joint) = avatar.global_skeleton.joints.get(joint_name) else {
             continue;
@@ -926,7 +948,7 @@ pub fn build_skinned_mesh_gltf(
         ibm_matrices.push(global_transform.inverse().to_cols_array());
     }
 
-    // Wire the nodes together using the nearest used ancestor.
+    // Connect each joint to its nearest used ancestor.
     for joint_name in &bones {
         let child_index = joint_to_node[joint_name];
 
@@ -949,6 +971,7 @@ pub fn build_skinned_mesh_gltf(
                 .iter()
                 .find(|&&j| joint_to_node[&j] == node_index)
                 .unwrap();
+
             avatar.global_skeleton.joints[joint_name].parent.is_none()
         })
         .cloned()
@@ -963,13 +986,13 @@ pub fn build_skinned_mesh_gltf(
         name: Some("AvatarSkin".to_string()),
     });
 
-    for node_index in skinned_nodes.iter() {
+    for node_index in &skinned_nodes {
         builder.root.nodes[node_index.value()].skin = Some(skin_index);
     }
 
     let skeleton_root_index = builder.root.push(Node {
         name: Some("SkeletonRoot".to_string()),
-        children: Some(root_joints), // joints go under SkeletonRoot
+        children: Some(root_joints),
         ..Default::default()
     });
 
@@ -985,9 +1008,9 @@ pub fn build_skinned_mesh_gltf(
         children: Some(
             skinned_nodes
                 .iter()
-                .cloned() // skinned meshes go directly under scene root
+                .cloned()
                 .chain(non_skinned_mesh_nodes)
-                .chain(std::iter::once(skeleton_root_index)) // skeleton root last
+                .chain(std::iter::once(skeleton_root_index))
                 .collect(),
         ),
         ..Default::default()
@@ -996,6 +1019,7 @@ pub fn build_skinned_mesh_gltf(
     let rotation = Quat::from_rotation_y(-FRAC_PI_2)
         * Quat::from_rotation_z(FRAC_PI_2)
         * Quat::from_rotation_x(-FRAC_PI_2);
+
     builder.root.nodes[scene_root_index.value()].rotation = Some(UnitQuaternion([
         rotation.x, rotation.y, rotation.z, rotation.w,
     ]));
@@ -1006,23 +1030,11 @@ pub fn build_skinned_mesh_gltf(
         extensions: Default::default(),
         extras: Default::default(),
     });
+
     builder.finalize(&path)?;
+
     Ok(())
 }
-
-/// Converts a byte vector to a vector aligned to a mutiple of 4
-fn to_padded_byte_vector(data: &[Vec3]) -> Vec<u8> {
-    let flat: Vec<[f32; 3]> = data.iter().map(|v| [v.x, v.y, v.z]).collect();
-    let byte_slice: &[u8] = bytemuck::cast_slice(&flat);
-    let mut new_vec: Vec<u8> = byte_slice.to_owned();
-
-    while !new_vec.len().is_multiple_of(4) {
-        new_vec.push(0); // pad to multiple of four bytes
-    }
-
-    new_vec
-}
-
 /// determines the highest and lowest points on the mesh to store as min and max
 ///fn bounding_coords(points: &[Vec3]) -> ([f32; 3], [f32; 3]) {
 fn bounding_coords(points: &[Vec3]) -> ([f32; 3], [f32; 3]) {

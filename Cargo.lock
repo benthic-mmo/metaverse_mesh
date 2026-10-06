@@ -446,8 +446,6 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "benthic_default_asset_converter"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68cbdc322d8ffba79c7fe3413fb9581d56cef3e9d4b302ae5f58d810c1856ff9"
 dependencies = [
  "anyhow",
  "benthic_protocol",
@@ -468,8 +466,6 @@ dependencies = [
 [[package]]
 name = "benthic_protocol"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8602113b39a5728b5fc07c378dba52184804b03ab733dbf7e563ef52bd48b65"
 dependencies = [
  "anyhow",
  "arc",
@@ -5459,8 +5455,6 @@ dependencies = [
 [[package]]
 name = "serde-llsd-benthic"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a16635913d8add13513cb610de57636ba130fc971ebdc7579ebe5e13220804da"
 dependencies = [
  "anyhow",
  "ascii85",
