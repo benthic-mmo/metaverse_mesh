@@ -1,6 +1,6 @@
 [package]
 name = "metaverse_mesh"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Skyler Clark<skylerjaneclark@gmail.com>"]
 description = "mesh handling for the open metaverse"
 license = "AGPL-3.0-or-later"
@@ -14,8 +14,8 @@ exclude = [
 ]
 
 [dependencies]
-benthic_default_asset_converter = {version = "0.3.2", features=["animations"]}
-benthic_protocol = "0.3.2"
+benthic_default_asset_converter = {path="../metaverse_client/crates/default_asset_converter/", features=["animations"]}
+benthic_protocol = {path="../metaverse_client/crates/benthic_protocol/"}
 
 glam = "0.32.1"
 gltf = "1.4.1"
