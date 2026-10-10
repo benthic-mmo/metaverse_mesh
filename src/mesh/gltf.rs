@@ -148,11 +148,13 @@ impl GltfBuilder {
         })
     }
 
-    fn add_indices(&mut self, indices: &[u16]) -> gltf_json::Index<gltf_json::Accessor> {
-        let mut bytes = Vec::with_capacity(indices.len() * 2);
+    fn add_indices(&mut self, indices: &[u32]) -> gltf_json::Index<gltf_json::Accessor> {
+        let mut bytes = Vec::with_capacity(indices.len() * std::mem::size_of::<u32>());
+
         for index in indices {
             bytes.extend_from_slice(&index.to_le_bytes());
         }
+
         self.align_4();
 
         let view = self.push_view(
@@ -161,13 +163,14 @@ impl GltfBuilder {
             Some(Valid(Target::ElementArrayBuffer)),
             "indices".to_string(),
         );
+
         self.combined_buffer.extend_from_slice(&bytes);
 
         self.root.push(gltf_json::Accessor {
             buffer_view: Some(view),
             byte_offset: Some(USize64(0)),
             count: USize64::from(indices.len()),
-            component_type: Valid(GenericComponentType(ComponentType::U16)),
+            component_type: Valid(GenericComponentType(ComponentType::U32)),
             type_: Valid(gltf_json::accessor::Type::Scalar),
             normalized: false,
             sparse: None,
