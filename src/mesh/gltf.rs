@@ -522,72 +522,86 @@ impl GltfBuilder {
         object: RenderObject,
         used_joints: Option<&BTreeSet<JointName>>,
     ) -> gltf_json::Index<gltf_json::Mesh> {
-        let pos_accessor = self.add_vertex_positions(&object.vertices);
-        let index_accessor = self.add_indices(&object.indices);
+        let mut primitives = Vec::new();
 
-        let mut attributes: std::collections::BTreeMap<_, _> =
-            [(Valid(Semantic::Positions), pos_accessor)]
-                .into_iter()
-                .collect();
+        for face in &object.faces {
+            if face.vertices.is_empty() || face.indices.is_empty() {
+                continue;
+            }
 
-        if let Some(normals) = object.normals {
-            assert_eq!(
-                normals.len(),
-                object.vertices.len(),
-                "Normal count ({}) does not match position count ({})",
-                normals.len(),
-                object.vertices.len()
-            );
+            let pos_accessor = self.add_vertex_positions(&face.vertices);
 
-            let normal_accessor = self.add_normals(&normals);
-            attributes.insert(Valid(Semantic::Normals), normal_accessor);
-        }
+            let mut attributes: std::collections::BTreeMap<_, _> =
+                [(Valid(Semantic::Positions), pos_accessor)]
+                    .into_iter()
+                    .collect();
 
-        let material = if let Some(uvs) = object.uv {
-            let uv_accessor = self.add_uvs(&uvs);
-            attributes.insert(Valid(Semantic::TexCoords(0)), uv_accessor);
+            // Normals are per-face vertex attributes.
+            if let Some(normals) = &face.normals {
+                if normals.len() == face.vertices.len() {
+                    let normal_accessor = self.add_normals(normals);
+                    attributes.insert(Valid(Semantic::Normals), normal_accessor);
+                }
+            }
 
-            if let Some(texture_path) = object.texture {
-                let (_, _, material_index) = self.add_texture(&texture_path);
-                Some(material_index)
+            // UVs and texture material belong to this face's primitive.
+            let material = if face.uv.len() == face.vertices.len() {
+                let uv_accessor = self.add_uvs(&face.uv);
+                attributes.insert(Valid(Semantic::TexCoords(0)), uv_accessor);
+
+                if let Some(texture_path) = &face.texture {
+                    let (_, _, material_index) = self.add_texture(texture_path);
+                    Some(material_index)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
-        if let Some(skin) = &object.skin
-            && let Some(used_joints) = used_joints
-        {
-            let (joint_indices_accessor, joint_weights_accessor) =
-                self.add_joint_data(skin.weights.clone(), used_joints);
-            if let Some(joints) = joint_indices_accessor {
-                attributes.insert(Valid(Semantic::Joints(0)), joints);
-            }
-            if let Some(weights) = joint_weights_accessor {
-                attributes.insert(Valid(Semantic::Weights(0)), weights);
-            }
-        };
+            // Each face has its own local index buffer, so do not offset its indices.
+            let index_accessor = self.add_indices(&face.indices);
 
-        let primitive = Primitive {
-            attributes,
-            indices: Some(index_accessor),
-            material,
-            mode: Valid(Mode::Triangles),
-            targets: None,
-            extensions: Default::default(),
-            extras: Default::default(),
-        };
+            // Skin attributes must correspond to this face's vertices.
+            if object.skin.is_some()
+                && let Some(used_joints) = used_joints
+            {
+                if let Some(weights) = &face.weights {
+                    if weights.len() == face.vertices.len() {
+                        let (joint_indices, joint_weights) =
+                            self.add_joint_data(weights.clone(), used_joints);
+
+                        if let Some(joints) = joint_indices {
+                            attributes.insert(Valid(Semantic::Joints(0)), joints);
+                        }
+
+                        if let Some(weights) = joint_weights {
+                            attributes.insert(Valid(Semantic::Weights(0)), weights);
+                        }
+                    }
+                }
+            }
+
+            primitives.push(Primitive {
+                attributes,
+                indices: Some(index_accessor),
+                material,
+                mode: Valid(Mode::Triangles),
+                targets: None,
+                extensions: Default::default(),
+                extras: Default::default(),
+            });
+        }
 
         let mesh_index = self.root.push(Mesh {
-            primitives: vec![primitive],
+            primitives,
             weights: None,
             extensions: Default::default(),
             extras: Default::default(),
             name: Some(object.name.clone()),
         });
 
+        // Create one scene node for the whole GLTF mesh.
         let node_index = self.add_node_with_mesh(mesh_index, &object.name);
 
         self.mesh_nodes.push(node_index);
