@@ -550,7 +550,7 @@ impl GltfBuilder {
                 attributes.insert(Valid(Semantic::TexCoords(0)), uv_accessor);
 
                 if let Some(texture_path) = &face.texture {
-                    let (_, _, material_index) = self.add_texture(texture_path);
+                    let (_, _, material_index) = self.add_texture(texture_path, face.color);
                     Some(material_index)
                 } else {
                     None
@@ -657,6 +657,7 @@ impl GltfBuilder {
     pub fn add_texture(
         &mut self,
         image_path: &PathBuf,
+        color: rgb::RGBA<u8>,
     ) -> (
         Index<gltf_json::Image>,
         Index<gltf_json::Texture>,
@@ -717,6 +718,12 @@ impl GltfBuilder {
                     extensions: Default::default(),
                     extras: Default::default(),
                 }),
+                base_color_factor: gltf_json::material::PbrBaseColorFactor([
+                    color.r as f32 / 255.0,
+                    color.g as f32 / 255.0,
+                    color.b as f32 / 255.0,
+                    color.a as f32 / 255.0,
+                ]),
                 metallic_factor: StrengthFactor(0.0),
                 roughness_factor: StrengthFactor(1.0),
                 ..Default::default()
