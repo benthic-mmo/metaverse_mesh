@@ -5,7 +5,7 @@ use crate::errors::MetaverseMeshError;
 use crate::{animation::gltf::export_animation, errors::MetaverseMeshAnimationError};
 use benthic_default_asset_converter::generated::DEFAULT_SKELETON;
 use benthic_protocol::default_animations::AnimationClip;
-use benthic_protocol::skeleton::{JointName, Skeleton};
+use benthic_protocol::skeleton::{Skeleton, SkinJoint};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::{
@@ -262,7 +262,7 @@ fn load_skeleton(path: &Path) -> Result<Skeleton, MetaverseMeshAnimationError> {
     })
 }
 
-fn used_joints(skeleton: &Skeleton) -> BTreeSet<JointName> {
+fn used_joints(skeleton: &Skeleton) -> BTreeSet<SkinJoint> {
     skeleton
         .joints
         .values()

@@ -1,5 +1,6 @@
-use benthic_protocol::render_data::{AvatarObject, JointWeight, RenderObject};
-use benthic_protocol::skeleton::{JointName, SkinJoint};
+use benthic_protocol::objects::{AttachPoint, AttachmentTarget};
+use benthic_protocol::render_data::{AttachmentData, AvatarObject, JointWeight, RenderObject};
+use benthic_protocol::skeleton::SkinJoint;
 use glam::{Quat, Vec3, usize};
 use gltf::material::AlphaMode;
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
@@ -18,6 +19,7 @@ use gltf_json::{
     },
 };
 use rgb::bytemuck;
+use std::collections::HashSet;
 use std::f32::consts::FRAC_PI_2;
 use std::{
     borrow::Cow,
@@ -29,6 +31,12 @@ use std::{
 
 use crate::errors::MetaverseMeshError;
 
+#[derive(Debug, Clone)]
+pub struct AttachmentNode {
+    pub node: Index<Node>,
+    pub attachment: AttachmentData,
+}
+
 struct GltfBuilder {
     root: gltf_json::Root,
     buffer_index: gltf_json::Index<gltf_json::Buffer>,
@@ -36,6 +44,7 @@ struct GltfBuilder {
     nodes: Vec<Index<Node>>,
     mesh_nodes: Vec<Index<Node>>,
     skinned_nodes: Vec<Index<Node>>,
+    attachments: Vec<AttachmentNode>,
 }
 
 impl GltfBuilder {
@@ -56,6 +65,7 @@ impl GltfBuilder {
             nodes: Vec::new(),
             mesh_nodes: Vec::new(),
             skinned_nodes: Vec::new(),
+            attachments: Vec::new(),
         }
     }
 
@@ -187,9 +197,9 @@ impl GltfBuilder {
     pub fn add_bind_pose_animation(
         &mut self,
         avatar: &AvatarObject,
-        bones: &BTreeSet<JointName>,
-        joint_to_node: &HashMap<JointName, Index<Node>>,
-        effective_parents: &HashMap<JointName, Option<JointName>>,
+        bones: &BTreeSet<SkinJoint>,
+        joint_to_node: &HashMap<SkinJoint, Index<Node>>,
+        effective_parents: &HashMap<SkinJoint, Option<SkinJoint>>,
     ) {
         use gltf_json::*;
 
@@ -374,13 +384,13 @@ impl GltfBuilder {
     fn add_joint_data(
         &mut self,
         skin_weights: Vec<JointWeight>,
-        bones: &BTreeSet<JointName>,
+        bones: &BTreeSet<SkinJoint>,
     ) -> (Option<Index<Accessor>>, Option<Index<Accessor>>) {
         if skin_weights.is_empty() {
             return (None, None);
         }
 
-        let bone_index: HashMap<JointName, u8> = bones
+        let bone_index: HashMap<SkinJoint, u8> = bones
             .iter()
             .enumerate()
             .map(|(i, j)| (*j, i as u8))
@@ -398,8 +408,7 @@ impl GltfBuilder {
             for i in 0..4 {
                 if let (Some(skin_joint), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
                     && weight > 0.0
-                    && let SkinJoint::Joint(joint_name) = skin_joint
-                    && let Some(&idx) = bone_index.get(joint_name)
+                    && let Some(&idx) = bone_index.get(skin_joint)
                 {
                     joints[i] = idx;
                     weights[i] = weight;
@@ -520,7 +529,7 @@ impl GltfBuilder {
     pub fn add_mesh(
         &mut self,
         object: RenderObject,
-        used_joints: Option<&BTreeSet<JointName>>,
+        used_joints: Option<&BTreeSet<SkinJoint>>,
     ) -> gltf_json::Index<gltf_json::Mesh> {
         let mut primitives = Vec::new();
 
@@ -603,6 +612,13 @@ impl GltfBuilder {
 
         // Create one scene node for the whole GLTF mesh.
         let node_index = self.add_node_with_mesh(mesh_index, &object.name);
+        // also handle attachment data
+        if let Some(attach_data) = object.attachment_data {
+            self.attachments.push(AttachmentNode {
+                node: node_index,
+                attachment: attach_data,
+            })
+        }
 
         self.mesh_nodes.push(node_index);
 
@@ -816,7 +832,7 @@ impl GltfBuilder {
             return;
         }
 
-        let mut joint_to_node: HashMap<JointName, Index<Node>> = HashMap::new();
+        let mut joint_to_node: HashMap<SkinJoint, Index<Node>> = HashMap::new();
 
         let mut skeleton_nodes = Vec::new();
         let mut ibm_matrices = Vec::new();
@@ -824,6 +840,7 @@ impl GltfBuilder {
 
         // Create joint nodes.
         for joint_name in bones {
+            // if the joint isn't in the global skeleton, don't create it
             let Some(joint) = avatar.global_skeleton.joints.get(joint_name) else {
                 continue;
             };
@@ -879,6 +896,72 @@ impl GltfBuilder {
             }
         }
 
+        // Attach rigid meshes to their target joints.
+        for attachment_node in &self.attachments {
+            let attachment = &attachment_node.attachment;
+
+            let target: AttachmentTarget = attachment.attach_point.into();
+
+            let joint = match target {
+                AttachmentTarget::Bone(name) => SkinJoint::Joint(name),
+                AttachmentTarget::DeformJoint(name) => SkinJoint::Deform(name),
+                AttachmentTarget::HUDAttachment(_) => {
+                    // HUD attachments should not be handled by the GLTF builder.
+                    continue;
+                }
+            };
+
+            let Some(&joint_node) = joint_to_node.get(&joint).or_else(|| {
+                let mut parent = avatar
+                    .global_skeleton
+                    .joints
+                    .get(&joint)
+                    .and_then(|j| j.parent);
+
+                while let Some(parent_joint) = parent {
+                    if let Some(node) = joint_to_node.get(&parent_joint) {
+                        println!(
+                            "Attachment {:?}: falling back to parent {:?}",
+                            joint, parent_joint
+                        );
+                        return Some(node);
+                    }
+
+                    parent = avatar
+                        .global_skeleton
+                        .joints
+                        .get(&parent_joint)
+                        .and_then(|j| j.parent);
+                }
+
+                None
+            }) else {
+                println!(
+                    "No skeleton ancestor found for attachment target {:?}",
+                    joint
+                );
+                continue;
+            };
+
+            // Set the attachment's transform rotation and scale relative to the joint.
+            let node = &mut self.root.nodes[attachment_node.node.value()];
+
+            node.translation = Some((attachment.position * attachment.scale).into());
+
+            let rotation = attachment.rotation;
+            node.rotation = Some(UnitQuaternion([
+                rotation.x, rotation.y, rotation.z, rotation.w,
+            ]));
+
+            node.scale = Some(attachment.scale.into());
+
+            // Make the joint the attachment's parent.
+            self.root.nodes[joint_node.value()]
+                .children
+                .get_or_insert_with(Vec::new)
+                .push(attachment_node.node);
+        }
+
         let ibm_accessor_index = self.add_inverse_bind_matrices(&ibm_matrices);
 
         let root_joints: Vec<Index<Node>> = bones
@@ -914,12 +997,19 @@ impl GltfBuilder {
 
         self.add_bind_pose_animation(avatar, bones, &joint_to_node, &effective_parents);
 
-        // Put meshes and skeleton underneath one root.
+        //remove nodes that have attachment data. They're already attached.
+        let attachment_nodes: HashSet<Index<Node>> = self
+            .attachments
+            .iter()
+            .map(|attachment| attachment.node)
+            .collect();
+
         let non_skinned_mesh_nodes: Vec<Index<Node>> = self
             .mesh_nodes
             .iter()
             .copied()
             .filter(|idx| !self.skinned_nodes.contains(idx))
+            .filter(|idx| !attachment_nodes.contains(idx))
             .collect();
 
         let scene_root_index = self.root.push(Node {
@@ -1021,7 +1111,7 @@ pub fn build_skinned_mesh_gltf(
     Ok(())
 }
 
-fn find_effective_parents(avatar: &AvatarObject) -> HashMap<JointName, Option<JointName>> {
+fn find_effective_parents(avatar: &AvatarObject) -> HashMap<SkinJoint, Option<SkinJoint>> {
     let bones = &avatar.used_joints;
     let mut effective_parents = HashMap::new();
 

@@ -1,7 +1,7 @@
 use crate::errors::MetaverseMeshAnimationError as AnimationError;
 use benthic_protocol::{
     default_animations::{AnimationClip, JointAnimation},
-    skeleton::{JointName, Skeleton},
+    skeleton::{Skeleton, SkinJoint},
 };
 use glam::Mat4;
 use indexmap::IndexMap;
@@ -13,9 +13,9 @@ use std::{
 
 fn effective_parent(
     skeleton: &Skeleton,
-    joint_name: JointName,
-    joint_filter: &BTreeSet<JointName>,
-) -> Result<Option<JointName>, AnimationError> {
+    joint_name: SkinJoint,
+    joint_filter: &BTreeSet<SkinJoint>,
+) -> Result<Option<SkinJoint>, AnimationError> {
     let joint = skeleton
         .joints
         .get(&joint_name)
@@ -40,7 +40,7 @@ fn effective_parent(
 
 fn joint_global_transform(
     skeleton: &Skeleton,
-    joint_name: JointName,
+    joint_name: SkinJoint,
 ) -> Result<Mat4, AnimationError> {
     skeleton
         .joints
@@ -57,7 +57,7 @@ fn joint_global_transform(
 
 fn joint_local_transform(
     skeleton: &Skeleton,
-    joint_name: JointName,
+    joint_name: SkinJoint,
 ) -> Result<Mat4, AnimationError> {
     skeleton
         .joints
@@ -74,7 +74,7 @@ fn joint_local_transform(
 
 pub fn filter_bind_skeleton(
     skeleton: &Skeleton,
-    used_joints: &BTreeSet<JointName>,
+    used_joints: &BTreeSet<SkinJoint>,
 ) -> Result<Skeleton, AnimationError> {
     let root = skeleton
         .root
@@ -146,7 +146,7 @@ pub fn filter_bind_skeleton(
 pub fn filter_animation_keyframes(
     animations: &[JointAnimation],
     skeleton: &Skeleton,
-    used_joints: &BTreeSet<JointName>,
+    used_joints: &BTreeSet<SkinJoint>,
 ) -> Result<Vec<JointAnimation>, AnimationError> {
     let mut filtered = Vec::new();
 
@@ -211,7 +211,7 @@ pub fn apply_joint_scale(
     mut animation: AnimationClip,
     animation_out_path: &Path,
     target_skeleton: &Skeleton,
-    used_joints: &BTreeSet<JointName>,
+    used_joints: &BTreeSet<SkinJoint>,
 ) -> Result<(), AnimationError> {
     let target_skeleton = &filter_bind_skeleton(target_skeleton, used_joints)?;
 
@@ -306,10 +306,10 @@ pub fn apply_joint_scale(
 
 pub fn check_skeleton_cycles(skeleton: &Skeleton) -> Result<(), AnimationError> {
     fn visit(
-        joint: JointName,
+        joint: SkinJoint,
         skeleton: &Skeleton,
-        visiting: &mut HashSet<JointName>,
-        visited: &mut HashSet<JointName>,
+        visiting: &mut HashSet<SkinJoint>,
+        visited: &mut HashSet<SkinJoint>,
     ) -> Result<(), AnimationError> {
         if visiting.contains(&joint) {
             return Err(AnimationError::SkeletonCycle { joint });
