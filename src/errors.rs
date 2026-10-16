@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use benthic_protocol::{errors::SessionError, skeleton::JointName};
+use benthic_protocol::{errors::SessionError, skeleton::SkinJoint};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaverseMeshError {
@@ -20,16 +20,16 @@ pub enum MetaverseMeshError {
 #[derive(Debug, thiserror::Error)]
 pub enum MetaverseMeshAnimationError {
     #[error("joint {joint:?} was not found in the skeleton")]
-    MissingJoint { joint: JointName },
+    MissingJoint { joint: SkinJoint },
 
     #[error("joint {joint:?} has no {transform_type} transform")]
     MissingTransform {
-        joint: JointName,
+        joint: SkinJoint,
         transform_type: &'static str,
     },
 
     #[error("Skeleton contains a cycle at joint {joint}")]
-    SkeletonCycle { joint: JointName },
+    SkeletonCycle { joint: SkinJoint },
 
     #[error("Session Error: {0}")]
     SessionError(#[from] SessionError),

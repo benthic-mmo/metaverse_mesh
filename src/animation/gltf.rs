@@ -1,6 +1,6 @@
 use benthic_protocol::{
     default_animations::AnimationClip,
-    skeleton::{JointName, Skeleton},
+    skeleton::{Skeleton, SkinJoint},
 };
 use gltf::{accessor::DataType, animation::Interpolation, binary::Glb};
 use gltf_json::{
@@ -24,7 +24,7 @@ pub struct GltfBuilder {
     pub root: gltf_json::Root,
     buffer_index: Index<gltf_json::Buffer>,
     combined_buffer: Vec<u8>,
-    joint_to_node: HashMap<JointName, Index<Node>>,
+    joint_to_node: HashMap<SkinJoint, Index<Node>>,
 }
 
 impl GltfBuilder {
