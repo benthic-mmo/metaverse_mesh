@@ -1,5 +1,8 @@
-use benthic_protocol::objects::{AttachPoint, AttachmentTarget};
-use benthic_protocol::render_data::{AttachmentData, AvatarObject, JointWeight, RenderObject};
+use benthic_protocol::objects::AttachmentTarget;
+use benthic_protocol::render_data::{
+    AttachmentData, AvatarObject, BlinnPhongMaterial, JointWeight, MaterialModel, PBRMaterial,
+    RenderFace, RenderObject,
+};
 use benthic_protocol::skeleton::SkinJoint;
 use glam::{Quat, Vec3, usize};
 use gltf::material::AlphaMode;
@@ -403,8 +406,6 @@ impl GltfBuilder {
             let mut joints = [0u8; 4];
             let mut weights = [0.0f32; 4];
 
-            // only process Joints, and not collision joints.
-            // TODO: Process collision joints.
             for i in 0..4 {
                 if let (Some(skin_joint), Some(&weight)) = (vw.joint_name.get(i), vw.weights.get(i))
                     && weight > 0.0
@@ -558,9 +559,15 @@ impl GltfBuilder {
                 let uv_accessor = self.add_uvs(&face.uv);
                 attributes.insert(Valid(Semantic::TexCoords(0)), uv_accessor);
 
-                if let Some(texture_path) = &face.texture {
-                    let (_, _, material_index) = self.add_texture(texture_path, face.color);
-                    Some(material_index)
+                if let Some(material) = &face.material {
+                    match material {
+                        MaterialModel::BlinnPhong(blinn_phong_material) => {
+                            self.add_blinn_phong_texture(face, blinn_phong_material)
+                        }
+                        MaterialModel::PBR(pbr_material) => {
+                            self.add_pbr_texture(face, pbr_material)
+                        }
+                    }
                 } else {
                     None
                 }
@@ -629,6 +636,143 @@ impl GltfBuilder {
         mesh_index
     }
 
+    fn add_pbr_texture(
+        &self,
+        _face: &RenderFace,
+        _pbr: &PBRMaterial,
+    ) -> Option<gltf_json::Index<gltf_json::Material>> {
+        None
+    }
+
+    fn add_blinn_phong_texture(
+        &mut self,
+        _face: &RenderFace,
+        blinn_phong: &BlinnPhongMaterial,
+    ) -> Option<gltf_json::Index<gltf_json::Material>> {
+        let image_data = fs::read(&blinn_phong.texture_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to read image file {}: {}",
+                blinn_phong.texture_path.display(),
+                e
+            );
+        });
+
+        self.align_4();
+        let buffer_byte_offset = self.combined_buffer.len() as u64;
+        self.combined_buffer.extend_from_slice(&image_data);
+
+        let buffer_view_index = self.root.push(View {
+            buffer: Index::new(0),
+            byte_length: image_data.len().into(),
+            byte_offset: Some(USize64(buffer_byte_offset)),
+            byte_stride: None,
+            target: None,
+            name: Some("image_buffer_view".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let mime_type = match blinn_phong
+            .texture_path
+            .extension()
+            .and_then(|s| s.to_str())
+        {
+            Some("png") => MimeType("image/png".to_string()),
+            Some("jpg" | "jpeg") => MimeType("image/jpeg".to_string()),
+            extension => panic!(
+                "Unsupported texture format {:?}: {}",
+                extension,
+                blinn_phong.texture_path.display()
+            ),
+        };
+
+        let image_index = self.root.push(gltf_json::Image {
+            uri: None,
+            mime_type: Some(mime_type),
+            buffer_view: Some(buffer_view_index),
+            name: Some("diffuse".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let texture_index = self.root.push(gltf_json::Texture {
+            sampler: None,
+            source: image_index,
+            name: Some("diffuse_texture".to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        let transform = &blinn_phong.texture_transform;
+
+        let texture_info = texture::Info {
+            index: texture_index,
+            tex_coord: 0,
+            extensions: Some(gltf_json::extensions::texture::Info {
+                texture_transform: Some(gltf_json::extensions::texture::TextureTransform {
+                    offset: gltf_json::extensions::texture::TextureTransformOffset([
+                        transform.offset_u,
+                        1.0 - transform.offset_v,
+                    ]),
+                    rotation: gltf_json::extensions::texture::TextureTransformRotation(
+                        -transform.rotation,
+                    ),
+                    scale: gltf_json::extensions::texture::TextureTransformScale([
+                        transform.repeat_u,
+                        transform.repeat_v,
+                    ]),
+                    tex_coord: None,
+                    extras: Default::default(),
+                }),
+                others: Default::default(),
+            }),
+            extras: Default::default(),
+        };
+
+        let image_data = fs::read(&blinn_phong.texture_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to read image file {}: {}",
+                blinn_phong.texture_path.display(),
+                e
+            );
+        });
+
+        let has_alpha = image::load_from_memory(&image_data)
+            .map(|img| {
+                img.color().channel_count() == 4 && img.to_rgba8().pixels().any(|p| p.0[3] < 255)
+            })
+            .unwrap_or(false);
+
+        // blinn phong can't express more complicated alpha modes.
+        // this checks if there's a transparency. if it's transparent, use mask,
+        // if it's not, use opaque.
+        let alpha_mode = if blinn_phong.color.a < 255 || has_alpha {
+            Checked::Valid(AlphaMode::Mask)
+        } else {
+            Checked::Valid(AlphaMode::Opaque)
+        };
+
+        let material_index = self.root.push(Material {
+            pbr_metallic_roughness: PbrMetallicRoughness {
+                base_color_texture: Some(texture_info),
+                base_color_factor: gltf_json::material::PbrBaseColorFactor([
+                    blinn_phong.color.r as f32 / 255.0,
+                    blinn_phong.color.g as f32 / 255.0,
+                    blinn_phong.color.b as f32 / 255.0,
+                    blinn_phong.color.a as f32 / 255.0,
+                ]),
+                metallic_factor: StrengthFactor(0.0),
+                roughness_factor: StrengthFactor(1.0),
+                ..Default::default()
+            },
+            alpha_mode,
+            name: Some("material_with_texture".to_string()),
+            ..Default::default()
+        });
+
+        Some(material_index)
+    }
+
     pub fn add_node_with_mesh(
         &mut self,
         mesh_index: gltf_json::Index<gltf_json::Mesh>,
@@ -668,88 +812,6 @@ impl GltfBuilder {
             extensions: Default::default(),
             extras: Default::default(),
         })
-    }
-
-    pub fn add_texture(
-        &mut self,
-        image_path: &PathBuf,
-        color: rgb::RGBA<u8>,
-    ) -> (
-        Index<gltf_json::Image>,
-        Index<gltf_json::Texture>,
-        Index<gltf_json::Material>,
-    ) {
-        let image_data = fs::read(image_path).unwrap_or_else(|e| {
-            panic!("Failed to read image file {}: {}", image_path.display(), e);
-        });
-
-        self.align_4();
-
-        let buffer_byte_offset = self.combined_buffer.len() as u64;
-        self.combined_buffer.extend_from_slice(&image_data);
-
-        let buffer_view_index = self.root.push(View {
-            buffer: Index::new(0),
-            byte_length: image_data.len().into(),
-            byte_offset: Some(USize64(buffer_byte_offset)),
-            byte_stride: None,
-            target: None,
-            name: Some("image_buffer_view".to_string()),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
-
-        let mime_type = match image_path.extension().and_then(|s| s.to_str()) {
-            Some("png") => MimeType("image/png".to_string()),
-            Some("jpg" | "jpeg") => MimeType("image/jpeg".to_string()),
-            extension => panic!(
-                "Unsupported texture format {:?}: {}",
-                extension,
-                image_path.display()
-            ),
-        };
-
-        let image_index = self.root.push(gltf_json::Image {
-            uri: None,
-            mime_type: Some(mime_type),
-            buffer_view: Some(buffer_view_index),
-            name: Some("diffuse".to_string()),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
-
-        let texture_index = self.root.push(gltf_json::Texture {
-            sampler: None,
-            source: image_index,
-            name: Some("diffuse_texture".to_string()),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
-
-        let material_index = self.root.push(Material {
-            pbr_metallic_roughness: PbrMetallicRoughness {
-                base_color_texture: Some(texture::Info {
-                    index: texture_index,
-                    tex_coord: 0,
-                    extensions: Default::default(),
-                    extras: Default::default(),
-                }),
-                base_color_factor: gltf_json::material::PbrBaseColorFactor([
-                    color.r as f32 / 255.0,
-                    color.g as f32 / 255.0,
-                    color.b as f32 / 255.0,
-                    color.a as f32 / 255.0,
-                ]),
-                metallic_factor: StrengthFactor(0.0),
-                roughness_factor: StrengthFactor(1.0),
-                ..Default::default()
-            },
-            alpha_mode: Checked::Valid(AlphaMode::Mask),
-            name: Some("material_with_texture".to_string()),
-            ..Default::default()
-        });
-
-        (image_index, texture_index, material_index)
     }
 
     pub fn finalize_scene(&mut self, name: &str) {
@@ -797,6 +859,10 @@ impl GltfBuilder {
     }
 
     fn finalize(mut self, path: &PathBuf) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        self.root
+            .extensions_used
+            .push("KHR_texture_transform".to_string());
+
         self.root.buffers[self.buffer_index.value()].byte_length =
             gltf_json::validation::USize64::from(self.combined_buffer.len());
 

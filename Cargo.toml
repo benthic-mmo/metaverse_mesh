@@ -25,6 +25,7 @@ serde_json = "1.0.150"
 regex = "1.12.4"
 indexmap = "2.14.2"
 thiserror = "2.0.20"
+image = "0.25.10"
 
 [dev-dependencies]
 bevy = "0.19.0"
