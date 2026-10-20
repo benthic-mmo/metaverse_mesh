@@ -1,6 +1,6 @@
 use benthic_protocol::{
-    default_animations::AnimationClip,
-    skeleton::{Skeleton, SkinJoint},
+    animation::types::AnimationClip,
+    avatar::skeleton::{Skeleton, SkinJoint},
 };
 use gltf::{accessor::DataType, animation::Interpolation, binary::Glb};
 use gltf_json::{

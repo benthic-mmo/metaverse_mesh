@@ -1,15 +1,16 @@
-use benthic_protocol::render_data::{AvatarObject, RenderObject};
+use benthic_protocol::avatar::types::AvatarObject;
+use benthic_protocol::objects::types::RenderObject;
 
 use crate::errors::MetaverseMeshError;
-// This file is for generating a mesh that includes a Skeleton object, along with SceneObject
-// jsons.
 use crate::mesh::gltf::{build_mesh_scene_gltf, build_skinned_mesh_gltf};
 use std::error::Error;
+use std::path::Path;
 use std::{
     ffi::{CStr, c_char},
     fs,
     path::PathBuf,
 };
+
 pub fn generate_skinned_mesh(
     agent_object: PathBuf,
     out_path: PathBuf,
@@ -26,11 +27,11 @@ pub fn generate_mesh(object: PathBuf, out_path: PathBuf) -> Result<(), Box<dyn E
         fs::read_to_string(&object).unwrap_or_else(|_| panic!("Failed to read {:?}", object));
     let renderobject: Vec<RenderObject> = serde_json::from_str(&json_str)
         .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
-    build_mesh_scene_gltf(renderobject, out_path)?;
+    build_mesh_scene_gltf(renderobject, &out_path)?;
     Ok(())
 }
 
-pub fn generate_object_mesh(object: PathBuf, out_path: PathBuf) -> Result<(), MetaverseMeshError> {
+pub fn generate_object_mesh(object: &Path, out_path: &Path) -> Result<(), MetaverseMeshError> {
     let json_str =
         fs::read_to_string(&object).unwrap_or_else(|_| panic!("Failed to read {:?}", object));
     let object: RenderObject = serde_json::from_str(&json_str)
