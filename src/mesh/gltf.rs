@@ -1,9 +1,10 @@
-use benthic_protocol::objects::AttachmentTarget;
-use benthic_protocol::render_data::{
-    AttachmentData, AvatarObject, BlinnPhongMaterial, JointWeight, MaterialModel, PBRMaterial,
-    RenderFace, RenderObject,
+use benthic_protocol::avatar::skeleton::SkinJoint;
+use benthic_protocol::avatar::types::{
+    AttachmentData, AttachmentTarget, AvatarObject, JointWeight,
 };
-use benthic_protocol::skeleton::SkinJoint;
+use benthic_protocol::objects::types::{
+    BlinnPhongMaterial, MaterialModel, PBRMaterial, RenderFace, RenderObject,
+};
 use glam::{Quat, Vec3, usize};
 use gltf::material::AlphaMode;
 use gltf_json::animation::{Channel, Interpolation, Property, Sampler, Target as ChannelTarget};
@@ -24,6 +25,7 @@ use gltf_json::{
 use rgb::bytemuck;
 use std::collections::HashSet;
 use std::f32::consts::FRAC_PI_2;
+use std::path::Path;
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
@@ -34,6 +36,8 @@ use std::{
 
 use crate::errors::MetaverseMeshError;
 
+/// Node indicies that represent a joint.
+/// The AttachmentData is what is parented to that joint
 #[derive(Debug, Clone)]
 pub struct AttachmentNode {
     pub node: Index<Node>,
@@ -858,7 +862,7 @@ impl GltfBuilder {
         self.nodes.clear();
     }
 
-    fn finalize(mut self, path: &PathBuf) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    fn finalize(mut self, path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
         self.root
             .extensions_used
             .push("KHR_texture_transform".to_string());
@@ -887,7 +891,7 @@ impl GltfBuilder {
         })?;
 
         glb.to_writer(file)?;
-        Ok(path.clone())
+        Ok(path.to_path_buf().clone())
     }
 
     pub fn finalize_avatar(&mut self, avatar: &AvatarObject) {
@@ -1136,7 +1140,7 @@ pub fn build_mesh_y_up(
 
 pub fn build_mesh_scene_gltf(
     objects: Vec<RenderObject>,
-    path: PathBuf,
+    path: &Path,
 ) -> Result<(), MetaverseMeshError> {
     let mut builder = GltfBuilder::new("Combined Avatar");
 
@@ -1147,7 +1151,7 @@ pub fn build_mesh_scene_gltf(
     }
 
     builder.finalize_scene("Scene");
-    builder.finalize(&path)?;
+    builder.finalize(path)?;
 
     Ok(())
 }

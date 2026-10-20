@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use benthic_protocol::{errors::SessionError, skeleton::SkinJoint};
+use benthic_protocol::{avatar::skeleton::SkinJoint, errors::ProtocolSessionError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaverseMeshError {
@@ -31,8 +31,8 @@ pub enum MetaverseMeshAnimationError {
     #[error("Skeleton contains a cycle at joint {joint}")]
     SkeletonCycle { joint: SkinJoint },
 
-    #[error("Session Error: {0}")]
-    SessionError(#[from] SessionError),
+    #[error("Protocol session Error: {0}")]
+    SessionError(#[from] ProtocolSessionError),
 
     #[error("Failed to read file: {path}, {source}")]
     ReadFile {

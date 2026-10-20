@@ -1,8 +1,6 @@
 use crate::errors::MetaverseMeshAnimationError as AnimationError;
-use benthic_protocol::{
-    default_animations::{AnimationClip, JointAnimation},
-    skeleton::{Skeleton, SkinJoint},
-};
+use benthic_protocol::animation::types::{AnimationClip, JointAnimation};
+use benthic_protocol::avatar::skeleton::{Skeleton, SkinJoint};
 use glam::Mat4;
 use indexmap::IndexMap;
 use std::path::Path;
