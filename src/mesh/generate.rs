@@ -15,27 +15,21 @@ pub fn generate_skinned_mesh(
     agent_object: PathBuf,
     out_path: PathBuf,
 ) -> Result<(), MetaverseMeshError> {
-    let json_str = fs::read_to_string(&agent_object)
-        .unwrap_or_else(|_| panic!("Failed to read {:?}", agent_object));
-    let avatar: AvatarObject = serde_json::from_str(&json_str)
-        .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
+    let json_str = fs::read_to_string(&agent_object)?;
+    let avatar: AvatarObject = serde_json::from_str(&json_str)?;
     build_skinned_mesh_gltf(avatar, out_path)
 }
 
 pub fn generate_mesh(object: PathBuf, out_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let json_str =
-        fs::read_to_string(&object).unwrap_or_else(|_| panic!("Failed to read {:?}", object));
-    let renderobject: Vec<RenderObject> = serde_json::from_str(&json_str)
-        .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
+    let json_str = fs::read_to_string(&object)?;
+    let renderobject: Vec<RenderObject> = serde_json::from_str(&json_str)?;
     build_mesh_scene_gltf(renderobject, &out_path)?;
     Ok(())
 }
 
 pub fn generate_object_mesh(object: &Path, out_path: &Path) -> Result<(), MetaverseMeshError> {
-    let json_str =
-        fs::read_to_string(&object).unwrap_or_else(|_| panic!("Failed to read {:?}", object));
-    let object: RenderObject = serde_json::from_str(&json_str)
-        .unwrap_or_else(|e| panic!("Failed to deserialize SceneGroup {:?}", e));
+    let json_str = fs::read_to_string(object)?;
+    let object: RenderObject = serde_json::from_str(&json_str)?;
     build_mesh_scene_gltf(vec![object], out_path)?;
     Ok(())
 }

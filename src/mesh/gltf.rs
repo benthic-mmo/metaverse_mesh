@@ -725,7 +725,7 @@ impl GltfBuilder {
                         transform.repeat_u,
                         transform.repeat_v,
                     ]),
-                    tex_coord: None,
+                    tex_coord: Some(0),
                     extras: Default::default(),
                 }),
                 others: Default::default(),
@@ -1168,11 +1168,9 @@ pub fn build_skinned_mesh_gltf(
             e
         })?;
 
-        let parts: Vec<RenderObject> = serde_json::from_str(&json_str)?;
+        let parts: RenderObject = serde_json::from_str(&json_str)?;
 
-        for part in parts {
-            builder.add_mesh(part, Some(&avatar.used_joints));
-        }
+        builder.add_mesh(parts, Some(&avatar.used_joints));
     }
 
     builder.finalize_avatar(&avatar);
