@@ -1,11 +1,10 @@
-use std::path::PathBuf;
-
 use benthic_protocol::{avatar::skeleton::SkinJoint, errors::ProtocolSessionError};
+use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetaverseMeshError {
     #[error("boxed error: {0}")]
-    BoxedError(#[from] std::boxed::Box<dyn std::error::Error>),
+    BoxedError(#[from] Box<dyn std::error::Error>),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
@@ -15,6 +14,9 @@ pub enum MetaverseMeshError {
 
     #[error("Gltf error: {0}")]
     GltfError(#[from] gltf::Error),
+
+    #[error("Failed to deserialize mesh JSON: {0}")]
+    MeshJsonDeserialize(#[source] serde_json::Error),
 }
 
 #[derive(Debug, thiserror::Error)]
