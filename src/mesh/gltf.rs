@@ -1,3 +1,4 @@
+use crate::errors::MetaverseMeshError;
 use benthic_protocol::avatar::skeleton::SkinJoint;
 use benthic_protocol::avatar::types::{
     AttachmentData, AttachmentTarget, AvatarObject, JointWeight,
@@ -22,22 +23,32 @@ use gltf_json::{
         USize64,
     },
 };
+
+#[cfg(feature = "ktx2")]
+use ktx::{
+    ErrorCode, KtxResult, Texture2, TextureCreateInfo, TextureCreateStorage, VkFormat,
+    encode_params::{BasisParams, KTX_BASIS_CODEC_UASTC_LDR_4X4, KTX_BASIS_PARAMS_SIZE},
+};
 use rgb::bytemuck;
+#[cfg(feature = "glb")]
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::f32::consts::FRAC_PI_2;
 use std::path::Path;
 use std::{
-    borrow::Cow,
     collections::{BTreeSet, HashMap},
     fs::{self, File},
     path::PathBuf,
     vec,
 };
+#[cfg(feature = "dxt1")]
+use texture_compressor::{AlphaPolicy, Effort, Format, ImageView, Settings};
 
-use crate::errors::MetaverseMeshError;
+const KHR_TEXTURE_BASISU: &str = "KHR_texture_basisu";
+#[cfg(feature = "dxt1")]
+const MSFT_TEXTURE_DDS: &str = "MSFT_texture_dds";
 
-/// Node indicies that represent a joint.
-/// The AttachmentData is what is parented to that joint
+/// Node indices that represent a joint.
 #[derive(Debug, Clone)]
 pub struct AttachmentNode {
     pub node: Index<Node>,
@@ -52,6 +63,9 @@ struct GltfBuilder {
     mesh_nodes: Vec<Index<Node>>,
     skinned_nodes: Vec<Index<Node>>,
     attachments: Vec<AttachmentNode>,
+    ktx2_textures: Vec<(usize, usize)>,
+    #[cfg(feature = "dxt1")]
+    dds_textures: Vec<(usize, usize)>,
 }
 
 impl GltfBuilder {
@@ -73,6 +87,9 @@ impl GltfBuilder {
             mesh_nodes: Vec::new(),
             skinned_nodes: Vec::new(),
             attachments: Vec::new(),
+            ktx2_textures: Vec::new(),
+            #[cfg(feature = "dxt1")]
+            dds_textures: Vec::new(),
         }
     }
 
@@ -652,52 +669,22 @@ impl GltfBuilder {
         &mut self,
         _face: &RenderFace,
         blinn_phong: &BlinnPhongMaterial,
-    ) -> Option<gltf_json::Index<gltf_json::Material>> {
-        let image_data = fs::read(&blinn_phong.texture_path).unwrap_or_else(|e| {
-            panic!(
-                "Failed to read image file {}: {}",
-                blinn_phong.texture_path.display(),
-                e
-            );
-        });
-
-        self.align_4();
-        let buffer_byte_offset = self.combined_buffer.len() as u64;
-        self.combined_buffer.extend_from_slice(&image_data);
-
-        let buffer_view_index = self.root.push(View {
-            buffer: Index::new(0),
-            byte_length: image_data.len().into(),
-            byte_offset: Some(USize64(buffer_byte_offset)),
-            byte_stride: None,
-            target: None,
-            name: Some("image_buffer_view".to_string()),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
-
-        let mime_type = match blinn_phong
+    ) -> Option<Index<gltf_json::Material>> {
+        let extension = blinn_phong
             .texture_path
             .extension()
-            .and_then(|s| s.to_str())
-        {
-            Some("png") => MimeType("image/png".to_string()),
-            Some("jpg" | "jpeg") => MimeType("image/jpeg".to_string()),
-            extension => panic!(
-                "Unsupported texture format {:?}: {}",
-                extension,
-                blinn_phong.texture_path.display()
-            ),
+            .and_then(|s| s.to_str())?;
+
+        let mime_type = match extension.to_ascii_lowercase().as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            _ => return None,
         };
 
-        let image_index = self.root.push(gltf_json::Image {
-            uri: None,
-            mime_type: Some(mime_type),
-            buffer_view: Some(buffer_view_index),
-            name: Some("diffuse".to_string()),
-            extensions: Default::default(),
-            extras: Default::default(),
-        });
+        let is_png = extension.eq_ignore_ascii_case("png");
+
+        // Always register the original image as the standard glTF fallback.
+        let image_index = self.add_image(&blinn_phong.texture_path, "diffuse", mime_type)?;
 
         let texture_index = self.root.push(gltf_json::Texture {
             sampler: None,
@@ -707,6 +694,89 @@ impl GltfBuilder {
             extras: Default::default(),
         });
 
+        #[cfg(feature = "dxt1")]
+        let mut using_dxt1 = false;
+
+        // Register optional BC1 DDS texture.
+        #[cfg(feature = "dxt1")]
+        if is_png {
+            let dds_path = dxt1_dds_path(&blinn_phong.texture_path);
+
+            if let Err(e) = png_to_dxt1_dds(&blinn_phong.texture_path, &dds_path) {
+                eprintln!(
+                    "Failed to convert PNG to BC1 DDS (using PNG fallback): {}: {:?}",
+                    blinn_phong.texture_path.display(),
+                    e
+                );
+            }
+
+            if dds_path.is_file() {
+                if let Some(dds_image_index) =
+                    self.add_image(&dds_path, "diffuse_dds", "image/vnd-ms.dds")
+                {
+                    self.dds_textures
+                        .push((texture_index.value(), dds_image_index.value()));
+
+                    using_dxt1 = true;
+                }
+            }
+        }
+
+        // Preserve optional Basis Universal KTX2 support when DXT1 is not selected.
+        #[cfg(feature = "ktx2")]
+        {
+            #[cfg(feature = "dxt1")]
+            let should_add_ktx2 = !using_dxt1;
+
+            #[cfg(not(feature = "dxt1"))]
+            let should_add_ktx2 = true;
+
+            if should_add_ktx2 {
+                let ktx2_path = blinn_phong
+                    .ktx2_path
+                    .clone()
+                    .or_else(|| is_png.then(|| blinn_phong.texture_path.with_extension("ktx2")));
+
+                if let Some(ktx2_path) = ktx2_path {
+                    if !ktx2_path.is_file() && is_png {
+                        match png_to_ktx2(&blinn_phong.texture_path, &ktx2_path) {
+                            Ok(()) => {
+                                println!("Generated KTX2 texture: {}", ktx2_path.display());
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "Failed to convert PNG to Basis UASTC KTX2: {}: {:?}",
+                                    blinn_phong.texture_path.display(),
+                                    e
+                                );
+                            }
+                        }
+                    }
+
+                    if ktx2_path.is_file() {
+                        if let Some(ktx2_image_index) =
+                            self.add_image(&ktx2_path, "diffuse_ktx2", "image/ktx2")
+                        {
+                            self.ktx2_textures
+                                .push((texture_index.value(), ktx2_image_index.value()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Determine alpha mode using the original image.
+        let has_alpha = image::open(&blinn_phong.texture_path)
+            .map(|img| img.to_rgba8().pixels().any(|p| p.0[3] < 255))
+            .unwrap_or(false);
+
+        let alpha_mode = if blinn_phong.color.a < 255 || has_alpha {
+            Checked::Valid(AlphaMode::Mask)
+        } else {
+            Checked::Valid(AlphaMode::Opaque)
+        };
+
+        // Texture transform.
         let transform = &blinn_phong.texture_transform;
 
         let texture_info = texture::Info {
@@ -733,29 +803,6 @@ impl GltfBuilder {
             extras: Default::default(),
         };
 
-        let image_data = fs::read(&blinn_phong.texture_path).unwrap_or_else(|e| {
-            panic!(
-                "Failed to read image file {}: {}",
-                blinn_phong.texture_path.display(),
-                e
-            );
-        });
-
-        let has_alpha = image::load_from_memory(&image_data)
-            .map(|img| {
-                img.color().channel_count() == 4 && img.to_rgba8().pixels().any(|p| p.0[3] < 255)
-            })
-            .unwrap_or(false);
-
-        // blinn phong can't express more complicated alpha modes.
-        // this checks if there's a transparency. if it's transparent, use mask,
-        // if it's not, use opaque.
-        let alpha_mode = if blinn_phong.color.a < 255 || has_alpha {
-            Checked::Valid(AlphaMode::Mask)
-        } else {
-            Checked::Valid(AlphaMode::Opaque)
-        };
-
         let material_index = self.root.push(Material {
             pbr_metallic_roughness: PbrMetallicRoughness {
                 base_color_texture: Some(texture_info),
@@ -776,7 +823,201 @@ impl GltfBuilder {
 
         Some(material_index)
     }
+    fn add_image(
+        &mut self,
+        path: &Path,
+        name: &str,
+        mime_type: &str,
+    ) -> Option<Index<gltf_json::Image>> {
+        #[cfg(feature = "glb")]
+        {
+            let image_data = fs::read(path).ok()?;
+            self.add_image_buffer(&image_data, name, mime_type)
+        }
 
+        #[cfg(not(feature = "glb"))]
+        {
+            // Reference the original image path directly.
+            // Do not copy or rename the image.
+            let uri = path.to_string_lossy().replace('\\', "/");
+
+            Some(self.root.push(gltf_json::Image {
+                uri: Some(uri),
+                mime_type: None,
+                buffer_view: None,
+                name: Some(name.to_string()),
+                extensions: Default::default(),
+                extras: Default::default(),
+            }))
+        }
+    }
+
+    #[cfg(feature = "glb")]
+    fn add_image_buffer(
+        &mut self,
+        image_data: &[u8],
+        name: &str,
+        mime_type: &str,
+    ) -> Option<Index<gltf_json::Image>> {
+        self.align_4();
+
+        let offset = self.combined_buffer.len();
+        self.combined_buffer.extend_from_slice(image_data);
+
+        let buffer_view = self.root.push(View {
+            buffer: self.buffer_index,
+            byte_length: image_data.len().into(),
+            byte_offset: Some(USize64::from(offset)),
+            byte_stride: None,
+            target: None,
+            name: Some(format!("{name}_buffer_view")),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        Some(self.root.push(gltf_json::Image {
+            uri: None,
+            mime_type: Some(MimeType(mime_type.to_string())),
+            buffer_view: Some(buffer_view),
+            name: Some(name.to_string()),
+            extensions: Default::default(),
+            extras: Default::default(),
+        }))
+    }
+
+    #[cfg(feature = "dxt1")]
+    pub fn png_to_dxt1_dds(input_path: &Path, output_path: &Path) -> std::io::Result<()> {
+        use std::io::Write;
+
+        let rgba = image::open(input_path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+            .to_rgba8();
+
+        let (width, height) = rgba.dimensions();
+
+        if width == 0 || height == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid texture dimensions",
+            ));
+        }
+
+        let has_alpha = rgba.pixels().any(|pixel| pixel.0[3] < 255);
+        let pixels = rgba.into_raw();
+
+        let image_view = ImageView::rgba8(&pixels, width, height, width as usize * 4)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{e:?}")))?;
+
+        let settings = Settings::new(Format::Bc1, Effort::Balanced).with_alpha(if has_alpha {
+            AlphaPolicy::PunchThrough { threshold: 128 }
+        } else {
+            AlphaPolicy::Opaque
+        });
+
+        let compressed = texture_compressor::encode(image_view, &settings)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{e:?}")))?;
+
+        let mut file = File::create(output_path)?;
+
+        // DDS magic.
+        file.write_all(b"DDS ")?;
+
+        // DDS_HEADER.
+        let flags = 0x0008_1007u32; // CAPS | HEIGHT | WIDTH | PIXELFORMAT | LINEARSIZE
+
+        for value in [
+            124,                     // dwSize
+            flags,                   // dwFlags
+            height,                  // dwHeight
+            width,                   // dwWidth
+            compressed.len() as u32, // dwPitchOrLinearSize
+            0,                       // dwDepth
+            0,                       // dwMipMapCount
+        ] {
+            file.write_all(&value.to_le_bytes())?;
+        }
+
+        // dwReserved1[11].
+        for _ in 0..11 {
+            file.write_all(&0u32.to_le_bytes())?;
+        }
+
+        // DDS_PIXELFORMAT.
+        for value in [
+            32,                           // dwSize
+            0x4,                          // DDPF_FOURCC
+            u32::from_le_bytes(*b"DX10"), // dwFourCC
+            0,                            // dwRGBBitCount
+            0,                            // dwRBitMask
+            0,                            // dwGBitMask
+            0,                            // dwBBitMask
+            0,                            // dwABitMask
+        ] {
+            file.write_all(&value.to_le_bytes())?;
+        }
+
+        // DDS_HEADER caps.
+        for value in [
+            0x1000u32, // DDSCAPS_TEXTURE
+            0,         // dwCaps2
+            0,         // dwCaps3
+            0,         // dwCaps4
+            0,         // dwReserved2
+        ] {
+            file.write_all(&value.to_le_bytes())?;
+        }
+
+        // DDS_HEADER_DXT10.
+        for value in [
+            72u32, // DXGI_FORMAT_BC1_UNORM_SRGB
+            3,     // D3D10_RESOURCE_DIMENSION_TEXTURE2D
+            0,     // miscFlag
+            1,     // arraySize
+            0,     // miscFlags2
+        ] {
+            file.write_all(&value.to_le_bytes())?;
+        }
+
+        // BC1 compressed image data.
+        file.write_all(&compressed)?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dxt1")]
+    fn apply_dxt1_extensions(&self, json: &mut serde_json::Value) {
+        if self.dds_textures.is_empty() {
+            return;
+        }
+
+        let textures = json["textures"]
+            .as_array_mut()
+            .expect("Missing textures array");
+
+        for (texture_index, dds_image_index) in &self.dds_textures {
+            textures[*texture_index]["extensions"][MSFT_TEXTURE_DDS] = serde_json::json!({
+                "source": dds_image_index
+            });
+        }
+    }
+
+    fn apply_ktx2_extensions(&self, json: &mut serde_json::Value) {
+        if self.ktx2_textures.is_empty() {
+            return;
+        }
+
+        let textures = json["textures"]
+            .as_array_mut()
+            .expect("Missing textures array");
+
+        for (texture_index, ktx2_image_index) in &self.ktx2_textures {
+            let texture = &mut textures[*texture_index];
+
+            texture["extensions"][KHR_TEXTURE_BASISU] = serde_json::json!({
+                "source": ktx2_image_index
+            });
+        }
+    }
     pub fn add_node_with_mesh(
         &mut self,
         mesh_index: gltf_json::Index<gltf_json::Mesh>,
@@ -862,15 +1103,55 @@ impl GltfBuilder {
         self.nodes.clear();
     }
 
+    #[cfg(feature = "glb")]
     fn finalize(mut self, path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        self.prepare_root();
+        self.write_glb(path)
+    }
+
+    #[cfg(not(feature = "glb"))]
+    fn finalize(mut self, path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        self.prepare_root();
+        self.write_gltf_bin(path)
+    }
+
+    fn prepare_root(&mut self) {
+        self.root.buffers[self.buffer_index.value()].byte_length =
+            USize64::from(self.combined_buffer.len());
+
         self.root
             .extensions_used
             .push("KHR_texture_transform".to_string());
 
-        self.root.buffers[self.buffer_index.value()].byte_length =
-            gltf_json::validation::USize64::from(self.combined_buffer.len());
+        if !self.ktx2_textures.is_empty()
+            && !self
+                .root
+                .extensions_used
+                .iter()
+                .any(|e| e == KHR_TEXTURE_BASISU)
+        {
+            self.root
+                .extensions_used
+                .push(KHR_TEXTURE_BASISU.to_string());
+        }
 
-        let json_string = gltf_json::serialize::to_string(&self.root)?;
+        #[cfg(feature = "dxt1")]
+        if !self.dds_textures.is_empty()
+            && !self
+                .root
+                .extensions_used
+                .iter()
+                .any(|e| e == MSFT_TEXTURE_DDS)
+        {
+            self.root.extensions_used.push(MSFT_TEXTURE_DDS.to_string());
+        }
+    }
+
+    #[cfg(feature = "glb")]
+    fn write_glb(self, path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let json = self.root_to_json()?;
+        let json_string = serde_json::to_string(&json)?;
+
         let glb = gltf::binary::Glb {
             header: gltf::binary::Header {
                 magic: *b"glTF",
@@ -881,17 +1162,48 @@ impl GltfBuilder {
             bin: Some(Cow::Owned(self.combined_buffer)),
         };
         let file = File::create(path).map_err(|e| {
-            format!("File::create failed:\n  path: {:?}\n  exists: {}\n  parent: {:?}\n  parent_exists: {}\n  error: {:?}",
-                path,
-                path.exists(),
-                path.parent(),
-                path.parent().map(|p| p.exists()).unwrap_or(false),
-                e,
-            )
-        })?;
+        format!("File::create failed:\n  path: {:?}\n  exists: {}\n  parent: {:?}\n  parent_exists: {}\n  error: {:?}",
+            path, path.exists(), path.parent(),
+            path.parent().map(|p| p.exists()).unwrap_or(false), e)
+    })?;
 
         glb.to_writer(file)?;
-        Ok(path.to_path_buf().clone())
+        Ok(path.to_path_buf())
+    }
+
+    #[cfg(not(feature = "glb"))]
+    fn write_gltf_bin(self, path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let bin_path = path.with_extension("bin");
+        let bin_name = bin_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or("invalid bin file name")?
+            .to_string();
+
+        let mut json = self.root_to_json()?;
+
+        // Reference the external buffer file from the glTF JSON.
+        json["buffers"][self.buffer_index.value()]["uri"] = serde_json::Value::String(bin_name);
+
+        let json_string = serde_json::to_string_pretty(&json)?;
+
+        fs::write(&bin_path, &self.combined_buffer)?;
+        fs::write(path, json_string)?;
+
+        Ok(path.to_path_buf())
+    }
+
+    fn root_to_json(&self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut json: serde_json::Value =
+            serde_json::from_str(&gltf_json::serialize::to_string(&self.root)?)?;
+
+        #[cfg(feature = "ktx2")]
+        self.apply_ktx2_extensions(&mut json);
+
+        #[cfg(feature = "dxt1")]
+        self.apply_dxt1_extensions(&mut json);
+
+        Ok(json)
     }
 
     pub fn finalize_avatar(&mut self, avatar: &AvatarObject) {
@@ -1207,6 +1519,71 @@ fn find_effective_parents(avatar: &AvatarObject) -> HashMap<SkinJoint, Option<Sk
     }
 
     effective_parents
+}
+#[cfg(feature = "dxt1")]
+fn dxt1_dds_path(input_path: &Path) -> PathBuf {
+    let stem = input_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("texture");
+
+    input_path.with_file_name(format!("{stem}.dxt1.dds"))
+}
+
+#[cfg(feature = "dxt1")]
+pub fn png_to_dxt1_dds(input_path: &Path, output_path: &Path) -> std::io::Result<()> {
+    GltfBuilder::png_to_dxt1_dds(input_path, output_path)
+}
+
+#[cfg(feature = "ktx2")]
+pub fn png_to_ktx2(input_path: &Path, output_path: &Path) -> KtxResult<()> {
+    // Decode PNG.
+    let image = image::open(input_path)
+        .map_err(|_| ErrorCode::FileDataError)?
+        .to_rgba8();
+
+    let (width, height) = image.dimensions();
+    let pixels = image.into_raw();
+
+    // Create texture description.
+    let create_info = TextureCreateInfo {
+        vk_format: VkFormat::R8G8B8A8_UNORM,
+        base_width: width,
+        base_height: height,
+        base_depth: 1,
+        num_dimensions: 2,
+        num_levels: 1,
+        num_layers: 1,
+        num_faces: 1,
+        is_array: false,
+        generate_mipmaps: false,
+        ..Default::default()
+    };
+
+    // Allocate KTX2 texture storage.
+    let mut texture = Texture2::create(&create_info, TextureCreateStorage::AllocStorage)?;
+
+    // Copy RGBA pixel data into allocated storage.
+    texture
+        .get_data_mut()
+        .ok_or(ErrorCode::InvalidOperation)?
+        .copy_from_slice(&pixels);
+
+    // Configure UASTC encoding.
+    let params = BasisParams {
+        struct_size: KTX_BASIS_PARAMS_SIZE,
+        codec: KTX_BASIS_CODEC_UASTC_LDR_4X4,
+        thread_count: 1,
+        ..Default::default()
+    };
+
+    // Encode using Basis Universal.
+    texture.compress_basis_ex(&params)?;
+
+    // Write KTX2.
+    texture.write_to_named_file(output_path)?;
+
+    Ok(())
 }
 
 /// Converts a byte vector to a vector aligned to a mutiple of 4
