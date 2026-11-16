@@ -14,7 +14,7 @@ exclude = [
 ]
 
 [features]
-default = ["dxt1"]
+default = []
 ktx2 = ["dep:ktx-rs"]
 glb = []
 dxt1 = ["dep:ktx-rs", "dep:texture-compressor"]
